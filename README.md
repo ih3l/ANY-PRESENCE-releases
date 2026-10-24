@@ -1,1 +1,1 @@
-text
+ANY-PRESENCE shows any game or program as your Discord Rich Presence. Made mainly for games that don’t support it natively, so you can finally show your friends that super awesome niche game you’re playing.
