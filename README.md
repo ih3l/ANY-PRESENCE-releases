@@ -4,6 +4,8 @@ Show any game or program as your Discord Rich Presence, even ones that have no D
 
 Pick a game, and ANY-PRESENCE sets its title, cover and status on your profile. You can change everything by hand.
 
+<img width="860" height="580" alt="image" src="https://github.com/user-attachments/assets/fda67c93-bffc-4507-9f52-5764213a2a01" />
+
 ## Features
 
 - **Search** Steam, GOG, VNDB, DLsite, Wikipedia, Lutris and the Internet Archive to find the right title and cover
