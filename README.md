@@ -14,7 +14,6 @@ Pick a game, and ANY-PRESENCE sets its title, cover and status on your profile. 
 - **Saved apps** turn the presence on by themselves when the program opens, and go back to the previous one when it closes
 - **Buttons** on your presence.
 - **Recent games:** play or launch a game in one click, with banners from Steam, GOG and DLsite, or your own
-- **Automatic updates** from this page, with the changes shown before you update
 
 ## Setup
 
