@@ -1,6 +1,6 @@
 # ANY-PRESENCE
 
-Show any game or program as your Discord Rich Presence, even ones that have no Discord support.
+Show any game or program as your Discord Rich Presence, specially those that have no Discord support.
 
 Pick a game, and ANY-PRESENCE sets its title, cover and status on your profile. You can change everything by hand.
 
