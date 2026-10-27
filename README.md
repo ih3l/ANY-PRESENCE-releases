@@ -10,7 +10,7 @@ Pick a game, and ANY-PRESENCE sets its title, cover and status on your profile. 
 
 - **Search** Steam, GOG, VNDB, DLsite, Wikipedia, Lutris and the Internet Archive to find the right title and cover
 - **Your own icons:** drop, paste or choose any image, and crop it
-- **Program icons** are added automatically
+- **Program icons** are added automatically (needs a free ImgBB key)
 - **Saved apps** turn the presence on by themselves when the program opens
 
 ## Setup
