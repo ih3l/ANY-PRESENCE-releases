@@ -13,7 +13,7 @@ Pick a game, and ANY-PRESENCE sets its title, cover and status on your profile. 
 - **Program icons** are added automatically (needs a free ImgBB key)
 - **Saved apps** turn the presence on by themselves when the program opens, and go back to the previous one when it closes
 - **Buttons** on your presence.
-- **Recent games:** play or launch a game in one click, with banners from Steam, GOG and DLsite, or your own
+- **Recent games:** play or launch a game in one click.
 
 ## Setup
 
