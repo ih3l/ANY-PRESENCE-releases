@@ -18,7 +18,7 @@ Pick a game, and ANY-PRESENCE sets its title, cover and status on your profile. 
 1. Download `ANY-PRESENCE.exe` from the [latest release](../../releases/latest).
 2. Create an application at [discord.com/developers/applications](https://discord.com/developers/applications).
 3. Copy its **Application ID** into ANY-PRESENCE → Settings.
-4. *(Optional)* Add a free [ImgBB](https://api.imgbb.com) API key in Settings so your own images and program icons show on Discord.
+4. Add a free [ImgBB](https://api.imgbb.com) API key in Settings so your own images and program icons show on Discord. *(Optional)*
 
 Windows only. Discord must be open on the same computer.
 
