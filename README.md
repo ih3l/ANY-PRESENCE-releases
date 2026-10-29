@@ -11,19 +11,21 @@ Pick a game, and ANY-PRESENCE sets its title, cover and status on your profile. 
 - **Search** Steam, GOG, VNDB, DLsite, Wikipedia, Lutris and the Internet Archive to find the right title and cover
 - **Your own icons:** drop, paste or choose any image, and crop it
 - **Program icons** are added automatically (needs a free ImgBB key)
-- **Saved apps** turn the presence on by themselves when the program opens, and go back to the previous one when it closes
+- **Saved apps** turn the presence on by themselves when the program opens.
 - **Buttons** on your presence.
 - **Recent games:** play or launch a game in one click.
+- **Themes:** five to choose from, plus one you design yourself.
 
 ## Setup
 
 1. Download `ANY-PRESENCE.exe` from the [latest release](../../releases/latest).
-2. Create an application at [discord.com/developers/applications](https://discord.com/developers/applications).
-3. Copy its **Application ID** into ANY-PRESENCE → Settings.
-4. Add a free [ImgBB](https://api.imgbb.com) API key in Settings so your own images and program icons show on Discord. *(Optional)*
+2. Open it, with Discord open on the same computer, and search a game or pick a running program, then press **Start**.
+3. Add a free [ImgBB](https://api.imgbb.com) API key in Settings so your own images and program icons show on Discord. *(Optional)*
 
-Windows only. Discord must be open on the same computer.
+ANY-PRESENCE comes with its own Discord application, so there's nothing to create. If you prefer your own, make one at [discord.com/developers/applications](https://discord.com/developers/applications) and paste its **Application ID** at the bottom of Settings. *(Optional)*
+
+Windows only.
 
 ## Privacy
 
-Everything runs on your computer. The app only contacts the game stores you search, ImgBB (if you add a key), Discord, and GitHub (to check for updates). Your settings are saved in `%APPDATA%\ANY-PRESENCE`.
+Everything runs on your computer. The app only contacts the game stores you search, ImgBB (if you add a key), Discord, and GitHub (to check for updates). Your settings, Recent list and hours played are saved in `%APPDATA%\ANY-PRESENCE`, along with small copies of the Recent (games) banners.
