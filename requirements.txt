@@ -1,0 +1,7 @@
+pywebview
+pypresence
+psutil
+requests
+pillow
+pystray
+icoextract
