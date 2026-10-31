@@ -4,7 +4,7 @@ Show any game or program as your Discord Rich Presence, specially those that hav
 
 Pick a game, and ANY-PRESENCE sets its title, cover and status on your profile. You can change everything by hand.
 
-<img width="860" height="580" alt="image" src="https://github.com/user-attachments/assets/7cc7229a-b9de-43ab-8fd2-eceba7c993bc" />
+<img width="844" height="541" alt="image" src="https://github.com/user-attachments/assets/e4fb3278-f256-401d-bc06-d7b664668d05" />
 
 ## Features
 
@@ -13,7 +13,8 @@ Pick a game, and ANY-PRESENCE sets its title, cover and status on your profile. 
 - **Program icons** are added automatically (needs a free ImgBB key)
 - **Saved apps** turn the presence on by themselves when the program opens.
 - **Buttons** on your presence.
-- **Recent games:** play or launch a game in one click.
+- **My Games:** play or launch a game in one click and track your hours played.
+- **Game info:** click a game's title in My Games or in the search results to see its store page info (description, screenshots, trailers, ratings and details) from Steam, GOG, DLsite or VNDB.
 - **Themes:** five to choose from, plus one you design yourself.
 
 ## Setup
@@ -27,5 +28,5 @@ ANY-PRESENCE comes with its own Discord application, so there's nothing to creat
 Windows only.
 
 ## Privacy
-
-Everything runs on your computer. The app only contacts the game stores you search, ImgBB (if you add a key), Discord, and GitHub (to check for updates). Your settings, Recent list and hours played are saved in `%APPDATA%\ANY-PRESENCE`, along with small copies of the Recent (games) banners.
+ 
+Everything runs on your computer. The app only contacts the game stores you search, ImgBB (if you add a key), Discord, and GitHub (to check for updates). Your settings, My Games list and hours played are saved in `%APPDATA%\ANY-PRESENCE`, along with small copies of the banners.
