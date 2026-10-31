@@ -27,6 +27,16 @@ ANY-PRESENCE comes with its own Discord application, so there's nothing to creat
 
 Windows only.
 
+## Windows says it's a virus?
+
+ANY-PRESENCE isn't code-signed (it cost money), and it does things antivirus programs are wary of: it can start with Windows, and it reads your running programs to find the game you're playing. Because of that, Windows SmartScreen or your antivirus may warn about it or flag it by mistake.
+
+So:
+- **Read the code.** All of it is in this repo. If you're not a developer, ask someone you trust to review it.
+- **Build it yourself.** Install Python and run `build.bat` to make your own copy.
+
+If Windows blocks it, click **More info → Run anyway**.
+
 ## Privacy
  
 Everything runs on your computer. The app only contacts the game stores you search, ImgBB (if you add a key), Discord, and GitHub (to check for updates). Your settings, My Games list and hours played are saved in `%APPDATA%\ANY-PRESENCE`, along with small copies of the banners.
