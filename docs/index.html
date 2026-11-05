@@ -1,1 +1,360 @@
+<!doctype html>
+<html lang="en" data-theme="rose">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ANY-PRESENCE</title>
+<meta name="description" content="Show any game or program as your Discord Rich Presence, even the ones with no Discord support. Free, for Windows.">
+<meta property="og:title" content="ANY-PRESENCE: Discord Rich Presence for any game">
+<meta property="og:description" content="Pick a game, and it shows on your Discord profile with its title, cover and status. Free, for Windows.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect x='1' y='1' width='62' height='62' rx='15' fill='%23F49AC2'/%3E%3Crect x='11' y='16' width='42' height='32' rx='7' fill='none' stroke='%233A0E22' stroke-width='7'/%3E%3Ccircle cx='32' cy='32' r='7' fill='%233A0E22'/%3E%3Ccircle cx='50' cy='14' r='9' fill='%2386E3B0' stroke='%233A0E22' stroke-width='4.5'/%3E%3C/svg%3E">
+<style>
+/* the same colour tokens as the app, so every theme looks the way it does there */
+:root,:root[data-theme=rose]{color-scheme:dark;
+  --bg:#140C11;--frame:#1C1218;--input:#21151C;--border:#302029;--border-hi:#4A2C3C;
+  --accent:#F49AC2;--accent-hi:#F7B0D0;--accent-on:#F27FB2;--on-accent:#3A0E22;
+  --text:#F7E9EF;--muted:#A58593;--soft:#CDB2BF;--neutral:#2A1B23;--neutral-hi:#38242F;
+  --danger:#A3364F;--danger-hi:#BC4561;--on-danger:#fff;--glow:#F472B6;--thumb:#F7E9EF;
+  --discord:#170E13;--discord-text:#C2A5B3;--sel-bg:#2C1722;--lead-on-bg:#43202F;--lead-on-fg:#F8A8CB;
+  --nsfw-bg:#3A1620;--nsfw-fg:#FF8FA3;--tg-off:#38242F;--overlay:rgba(14,5,10,.7);--empty:#3A2631;--skel:#24161E;
+  --ok:#86E3B0;--err:#FF8FA3;--shadow:0 20px 50px rgba(0,0,0,.55)}
+:root[data-theme=violet]{color-scheme:dark;
+  --bg:#0B0A12;--frame:#131221;--input:#171629;--border:#24223A;--border-hi:#3A3660;
+  --accent:#7C5CFF;--accent-hi:#9078FF;--accent-on:#9B84FF;--on-accent:#fff;
+  --text:#ECEAF8;--muted:#8582A3;--soft:#B7B4D6;--neutral:#1E1C33;--neutral-hi:#2A2745;
+  --danger:#8B2840;--danger-hi:#A3314D;--on-danger:#fff;--glow:#B3A1FF;--thumb:#ECEAF8;
+  --discord:#0F0E1A;--discord-text:#B5B2D3;--sel-bg:#1A1636;--lead-on-bg:#2A2355;--lead-on-fg:#B3A1FF;
+  --nsfw-bg:#2D1727;--nsfw-fg:#F59BB8;--tg-off:#2A2745;--overlay:rgba(5,4,12,.68);--empty:#2B2848;--skel:#1A1930;
+  --ok:#8FE3B0;--err:#F59BB8;--shadow:0 20px 50px rgba(0,0,0,.55)}
+:root[data-theme=graphite]{color-scheme:dark;
+  --bg:#0C0C0D;--frame:#151516;--input:#1B1B1D;--border:#262628;--border-hi:#3A3A40;
+  --accent:#6EA8FE;--accent-hi:#8DBBFF;--accent-on:#8DBBFF;--on-accent:#0A1626;
+  --text:#ECECEE;--muted:#85858C;--soft:#B4B4BA;--neutral:#232326;--neutral-hi:#2F2F33;
+  --danger:#8B2C35;--danger-hi:#A3363F;--on-danger:#fff;--glow:#8DBBFF;--thumb:#ECECEE;
+  --discord:#111214;--discord-text:#B5BAC1;--sel-bg:#16202E;--lead-on-bg:#1E2E48;--lead-on-fg:#8DBBFF;
+  --nsfw-bg:#2D171C;--nsfw-fg:#F08C8C;--tg-off:#2F2F33;--overlay:rgba(0,0,0,.7);--empty:#2E2E32;--skel:#1C1C1F;
+  --ok:#8FE3B0;--err:#F08C8C;--shadow:0 20px 50px rgba(0,0,0,.6)}
+:root[data-theme=paper]{color-scheme:light;
+  --bg:#F5F4F0;--frame:#FFFFFF;--input:#EFEDE7;--border:#E3E0D8;--border-hi:#CFCAFB;
+  --accent:#4F46E5;--accent-hi:#4338CA;--accent-on:#6366F1;--on-accent:#fff;
+  --text:#1B1B22;--muted:#77747F;--soft:#55535E;--neutral:#E8E5DD;--neutral-hi:#DDD9CF;
+  --danger:#C4374B;--danger-hi:#A82C3E;--on-danger:#fff;--glow:#818CF8;--thumb:#fff;
+  --discord:#FFFFFF;--discord-text:#6B6877;--sel-bg:#EEF0FF;--lead-on-bg:#E4E3FB;--lead-on-fg:#4F46E5;
+  --nsfw-bg:#FBE4E7;--nsfw-fg:#C4374B;--tg-off:#D6D2C8;--overlay:rgba(30,28,40,.35);--empty:#D3CFC4;--skel:#EAE7DF;
+  --ok:#15803D;--err:#C4374B;--shadow:0 20px 50px rgba(30,28,60,.18)}
+:root[data-theme=blush]{color-scheme:light;
+  --bg:#FFF5F8;--frame:#FFFFFF;--input:#FFEBF1;--border:#F6D9E3;--border-hi:#F3B8CF;
+  --accent:#F49AC2;--accent-hi:#F27FB2;--accent-on:#EC6AA5;--on-accent:#4A0F2B;
+  --text:#3A2230;--muted:#A27A8C;--soft:#7A5A6A;--neutral:#FCE3EC;--neutral-hi:#F8D3E1;
+  --danger:#D6455F;--danger-hi:#BE3A52;--on-danger:#fff;--glow:#F472B6;--thumb:#fff;
+  --discord:#FFFFFF;--discord-text:#8A6676;--sel-bg:#FFEEF4;--lead-on-bg:#FFDCEA;--lead-on-fg:#C2417A;
+  --nsfw-bg:#FFE0E6;--nsfw-fg:#D6455F;--tg-off:#F1D3DF;--overlay:rgba(74,15,43,.28);--empty:#F0CCDA;--skel:#FDE7EF;
+  --ok:#1F8F5F;--err:#D6455F;--shadow:0 20px 50px rgba(120,40,80,.18)}
 
+:root{--radius:12px;--font:"Segoe UI Variable Text","Segoe UI",Inter,system-ui,-apple-system,sans-serif;--rail:64px}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:70px}
+body{background:var(--bg);color:var(--text);font:16px/1.55 var(--font);-webkit-font-smoothing:antialiased;transition:background .25s,color .25s;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+img{display:block;max-width:100%}
+svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+:focus-visible{outline:2px solid var(--accent-on);outline-offset:3px;border-radius:8px}
+.wrap{width:min(1080px,100% - 40px);margin-inline:auto}
+section{padding:84px 0}
+.eyebrow{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+h2{font-size:clamp(26px,3.4vw,36px);line-height:1.15;letter-spacing:-.02em;font-weight:650}
+.lead{color:var(--soft);margin-top:12px;max-width:56ch}
+
+/* side rail, like the app's */
+.rail{position:fixed;left:0;top:0;bottom:0;width:var(--rail);display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 0;border-right:1px solid var(--border);background:var(--bg);z-index:20;transition:background .25s}
+.rail .sp{flex:1}
+.rail .logo{width:30px;height:30px;margin-bottom:10px}
+.rb{position:relative;width:44px;height:44px;border-radius:12px;display:grid;place-items:center;color:var(--muted);transition:background .15s,color .15s}
+.rb svg{width:20px;height:20px}
+.rb:hover:not(.on){background:var(--neutral);color:var(--text)}
+.rb.on{background:var(--lead-on-bg);color:var(--lead-on-fg)}
+.rb.on::before{content:"";position:absolute;left:-10px;top:12px;bottom:12px;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
+.rb .tip{position:absolute;left:54px;top:50%;transform:translateY(-50%);padding:4px 10px;border-radius:8px;background:var(--frame);border:1px solid var(--border);color:var(--text);font-size:12.5px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s}
+.rb:hover .tip,.rb:focus-visible .tip{opacity:1}
+.page{margin-left:var(--rail)}
+
+/* top bar */
+.top{position:sticky;top:0;z-index:15;backdrop-filter:blur(12px);background:color-mix(in srgb,var(--bg) 82%,transparent);border-bottom:1px solid var(--border)}
+.top .wrap{display:flex;align-items:center;gap:14px;height:58px}
+.top .name{font-weight:600;letter-spacing:.01em;flex:1;font-size:15px}
+.dots{display:flex;gap:7px;align-items:center}
+.dot{width:20px;height:20px;border-radius:50%;border:2px solid var(--border-hi);transition:transform .15s,border-color .15s}
+.dot:hover{transform:scale(1.15)}.dot.on{border-color:var(--accent)}
+.btn{display:inline-flex;align-items:center;gap:9px;height:44px;padding:0 20px;border-radius:12px;font-weight:600;font-size:15px;transition:background .15s,transform .1s,color .15s}
+.btn svg{width:18px;height:18px}
+.btn.primary{background:var(--accent);color:var(--on-accent)}.btn.primary:hover{background:var(--accent-hi)}
+.btn.ghost{background:var(--neutral);color:var(--text)}.btn.ghost:hover{background:var(--neutral-hi)}
+.btn:active{transform:translateY(1px)}
+.btn.sm{height:36px;padding:0 15px;font-size:13.5px;border-radius:10px}
+
+/* hero */
+.hero{padding:68px 0 36px;position:relative}
+.hero::before{content:"";position:absolute;inset:-60px 0 0;background:radial-gradient(55% 60% at 78% 8%,color-mix(in srgb,var(--glow) 20%,transparent),transparent 70%);pointer-events:none}
+.hero .wrap{position:relative;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.25fr);gap:44px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:999px;background:var(--neutral);color:var(--soft);font-size:13px;margin-bottom:20px}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 25%,transparent)}
+h1{font-size:clamp(36px,5.4vw,60px);line-height:1.04;letter-spacing:-.03em;font-weight:700}
+h1 em{font-style:normal;color:var(--accent-on)}
+.hero p.sub{font-size:18px;color:var(--soft);margin-top:18px;max-width:46ch}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+.meta{margin-top:16px;font-size:13px;color:var(--muted)}
+.stage{position:relative;padding-bottom:70px}
+.win{border-radius:14px;overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow);background:var(--bg)}
+.win img{width:100%;height:auto;aspect-ratio:860/580}
+.dc{position:absolute;right:-14px;bottom:0;width:min(310px,78%);background:var(--discord);border:1px solid var(--border-hi);border-radius:14px;padding:14px 14px 12px;box-shadow:var(--shadow)}
+.dc small{display:block;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--discord-text);margin-bottom:10px}
+.dc .row{display:flex;gap:12px;align-items:center}
+.dc .art{width:66px;height:66px;border-radius:11px;flex:none;background:linear-gradient(#2b1b4d,#e0668a);position:relative;overflow:hidden}
+.dc .art::after{content:"";position:absolute;width:26px;height:26px;border-radius:50%;background:#ffd9a0;right:12px;top:14px}
+.dc .art::before{content:"";position:absolute;left:-8px;right:-8px;bottom:-14px;height:34px;background:#000;opacity:.35;border-radius:50% 50% 0 0}
+.dc b{display:block;font-size:15px;line-height:1.25}
+.dc span{display:block;font-size:13px;color:var(--discord-text);line-height:1.35}
+.dc .tm{color:var(--ok)}
+.dc .gb{margin-top:12px;border:1px solid var(--border-hi);border-radius:9px;padding:7px;text-align:center;font-size:13px;font-weight:600;background:var(--input)}
+
+/* cards */
+.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:38px}
+.card{background:var(--frame);border:1px solid var(--border);border-radius:var(--radius);padding:20px;transition:border-color .2s,background .25s}
+.card:hover{border-color:var(--border-hi)}
+.ico{width:40px;height:40px;border-radius:11px;background:var(--lead-on-bg);color:var(--lead-on-fg);display:grid;place-items:center;margin-bottom:14px}
+.ico svg{width:20px;height:20px}
+.card h3{font-size:16px;font-weight:600;margin-bottom:5px}
+.card p{font-size:14.5px;color:var(--soft);line-height:1.5}
+
+/* steps */
+.steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:38px}
+.step{background:var(--frame);border:1px solid var(--border);border-radius:var(--radius);padding:22px;position:relative}
+.step .n{width:30px;height:30px;border-radius:50%;background:var(--accent);color:var(--on-accent);font-weight:700;display:grid;place-items:center;font-size:14px;margin-bottom:14px}
+.step h3{font-size:16px;margin-bottom:4px}.step p{font-size:14.5px;color:var(--soft)}
+
+/* screenshots */
+.tabs{display:inline-flex;gap:4px;padding:4px;border-radius:12px;background:var(--neutral);margin-top:30px;flex-wrap:wrap}
+.tab{padding:9px 18px;border-radius:9px;font-size:14.5px;color:var(--soft);transition:background .15s,color .15s}
+.tab:hover:not(.on){color:var(--text)}
+.tab.on{background:var(--accent);color:var(--on-accent);font-weight:600}
+.shot{margin-top:24px;max-width:860px}
+.shot .win{margin-bottom:14px}
+.shot p{color:var(--soft);font-size:15px;min-height:46px}
+
+/* themes */
+.themes{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:34px}
+.th{background:var(--frame);border:1px solid var(--border);border-radius:var(--radius);padding:10px 10px 12px;text-align:center;transition:border-color .15s;cursor:pointer;position:relative}
+.th:hover{border-color:var(--border-hi)}.th.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.sw{display:flex;height:46px;border-radius:9px;overflow:hidden;border:1px solid var(--border-hi);margin-bottom:9px}
+.sw i{flex:1;position:relative}.sw i:last-child{flex:.6}
+.sw i::after{content:attr(data-hex);position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);background:var(--frame);color:var(--text);border:1px solid var(--border);padding:2px 7px;border-radius:7px;font:600 11px/1.4 var(--font);opacity:0;pointer-events:none;transition:opacity .12s;z-index:2;white-space:nowrap}
+.sw i:hover::after{opacity:1}
+.th span{font-size:14px;color:var(--soft)}.th.on span{color:var(--text);font-weight:600}
+.note{margin-top:16px;color:var(--muted);font-size:14px}
+
+/* faq */
+.acc{background:var(--frame);border:1px solid var(--border);border-radius:var(--radius);margin-top:10px;overflow:hidden}
+.acc summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:12px;padding:16px 18px;font-weight:600;font-size:15.5px}
+.acc summary::-webkit-details-marker{display:none}
+.acc summary svg{margin-left:auto;transition:transform .2s;color:var(--muted)}
+.acc[open] summary svg{transform:rotate(90deg)}
+.acc .body{padding:0 18px 18px;color:var(--soft);font-size:15px}
+.acc .body p+p{margin-top:10px}
+.acc a{color:var(--accent-on);text-decoration:underline;text-underline-offset:3px}
+.faq{max-width:780px;margin-top:30px}
+
+/* download band + footer */
+.band{background:var(--frame);border:1px solid var(--border);border-radius:18px;padding:44px 28px;text-align:center;position:relative;overflow:hidden}
+.band::before{content:"";position:absolute;inset:0;background:radial-gradient(60% 90% at 50% 0,color-mix(in srgb,var(--glow) 16%,transparent),transparent 70%);pointer-events:none}
+.band>*{position:relative}.band .cta{justify-content:center}.band .lead{margin-inline:auto}
+footer{padding:36px 0 60px;color:var(--muted);font-size:13.5px;border-top:1px solid var(--border)}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px 28px;align-items:center;justify-content:space-between}
+footer nav{display:flex;gap:20px}footer a:hover{color:var(--text)}
+footer p{max-width:60ch;line-height:1.5}
+
+.toast{position:fixed;left:50%;bottom:28px;transform:translate(-50%,20px);background:var(--frame);border:1px solid var(--border-hi);color:var(--text);padding:9px 16px;border-radius:11px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+.reveal{opacity:0;transform:translateY(14px);transition:opacity .5s,transform .5s}
+.reveal.in{opacity:1;transform:none}
+
+@media (max-width:900px){
+  .hero .wrap{grid-template-columns:1fr;gap:34px}
+  .stage{padding-bottom:0}.dc{position:relative;right:auto;margin:-40px 0 0 auto;width:min(320px,92%)}
+  .grid,.steps{grid-template-columns:1fr 1fr}
+  .themes{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:700px){
+  :root{--rail:0px}
+  .rail{top:auto;right:0;width:auto;height:62px;flex-direction:row;justify-content:space-around;padding:0 8px;border-right:0;border-top:1px solid var(--border);gap:0}
+  .rail .logo,.rail .sp,.rb .tip{display:none}
+  .rb.on::before{left:12px;right:12px;top:-9px;bottom:auto;width:auto;height:3px;border-radius:0 0 3px 3px}
+  .page{margin-left:0;padding-bottom:62px}
+  .dots{display:none}
+  section{padding:60px 0}
+  .grid,.steps{grid-template-columns:1fr}
+  .themes{grid-template-columns:1fr 1fr}
+  .btn{height:46px}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}.reveal{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+
+<nav class="rail" aria-label="Sections">
+  <svg class="logo" viewBox="0 0 64 64"><rect x="1" y="1" width="62" height="62" rx="15" fill="var(--accent)" stroke="none"/><rect x="11" y="16" width="42" height="32" rx="7" fill="none" stroke="var(--on-accent)" stroke-width="7"/><circle cx="32" cy="32" r="7" fill="var(--on-accent)" stroke="none"/><circle cx="50" cy="14" r="9" fill="var(--ok)" stroke="var(--on-accent)" stroke-width="4.5"/></svg>
+  <a class="rb on" href="#top" data-s="top" aria-label="Home"><svg viewBox="0 0 16 16"><path d="M4.5 2.8v10.4L13 8z"/></svg><span class="tip">Home</span></a>
+  <a class="rb" href="#features" data-s="features" aria-label="Features"><svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.2"/></svg><span class="tip">Features</span></a>
+  <a class="rb" href="#screens" data-s="screens" aria-label="Screenshots"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><circle cx="6" cy="7" r="1.3"/><path d="M3 12l3.5-3 2.5 2 2-1.5L14 12"/></svg><span class="tip">Screenshots</span></a>
+  <a class="rb" href="#themes" data-s="themes" aria-label="Themes"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><circle cx="5.6" cy="7" r=".9" fill="currentColor"/><circle cx="8.4" cy="5" r=".9" fill="currentColor"/><circle cx="10.8" cy="7.6" r=".9" fill="currentColor"/><path d="M8 14c-1.2 0-1.2-1.4-.3-2 1-.7 1.2-1.9-.2-2"/></svg><span class="tip">Themes</span></a>
+  <div class="sp"></div>
+  <a class="rb" href="#faq" data-s="faq" aria-label="Questions"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M6.3 6.3a1.8 1.8 0 113 1.3c-.7.5-1.3.8-1.3 1.6M8 11.3v.1"/></svg><span class="tip">Questions</span></a>
+  <a class="rb" href="#download" data-s="download" aria-label="Download"><svg viewBox="0 0 16 16"><path d="M8 2.5v8M4.8 7.6L8 10.8l3.2-3.2M3 13h10"/></svg><span class="tip">Download</span></a>
+</nav>
+
+<div class="page" id="top">
+  <header class="top"><div class="wrap">
+    <div class="name">ANY-PRESENCE</div>
+    <div class="dots" id="dots" role="group" aria-label="Page theme"></div>
+    <a class="btn primary sm" href="https://github.com/ih3l/ANY-PRESENCE-releases/releases/latest/download/ANY-PRESENCE.exe"><svg viewBox="0 0 16 16"><path d="M8 2.5v8M4.8 7.6L8 10.8l3.2-3.2M3 13h10"/></svg>Download</a>
+  </div></header>
+
+  <section class="hero" style="padding-top:64px"><div class="wrap">
+    <div>
+      <div class="pill"><i></i>Free · Windows</div>
+      <h1>Show <em>any game</em> on your Discord.</h1>
+      <p class="sub">Pick a game or any running program, and ANY-PRESENCE sets its title, cover and status on your profile. Even the ones Discord doesn't know about.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/ih3l/ANY-PRESENCE-releases/releases/latest/download/ANY-PRESENCE.exe"><svg viewBox="0 0 16 16"><path d="M8 2.5v8M4.8 7.6L8 10.8l3.2-3.2M3 13h10"/></svg>Download for Windows</a>
+        <a class="btn ghost" href="https://github.com/ih3l/ANY-PRESENCE-releases"><svg viewBox="0 0 16 16"><path d="M5.5 4.5L2.5 8l3 3.5M10.5 4.5l3 3.5-3 3.5"/></svg>View the code</a>
+      </div>
+      <p class="meta"><span id="ver">Windows 10 and 11</span> · Needs the Discord desktop app</p>
+    </div>
+    <div class="stage">
+      <div class="win"><img data-shot="presence" src="shots/rose/presence.webp" alt="ANY-PRESENCE showing a game with its cover, status line and a Get on Steam button" width="1290" height="870"></div>
+      <div class="dc" aria-hidden="true">
+        <small>Playing a game</small>
+        <div class="row"><div class="art"></div><div><b>Lanternfall</b><span>Chapter 3: The Drifting Isles</span><span class="tm" id="tick">01:15:21 elapsed</span></div></div>
+        <div class="gb">Get on Steam</div>
+      </div>
+    </div>
+  </div></section>
+
+  <section id="features"><div class="wrap">
+    <div class="eyebrow">What it does</div>
+    <h2>Everything you can change, you can change.</h2>
+    <p class="lead">Searches fill in the details for you. Anything it gets wrong, you can edit by hand.</p>
+    <div class="grid">
+      <div class="card reveal"><div class="ico"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.3"/><path d="M10.3 10.3L13.5 13.5"/></svg></div><h3>Search the stores</h3><p>Steam, GOG, the App Store, VNDB, DLsite, Wikipedia, Lutris and the Internet Archive fill in the title and cover.</p></div>
+      <div class="card reveal"><div class="ico"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="8.5" rx="1.8"/><path d="M6 14h4M8 11.5V14"/></svg></div><h3>Any program</h3><p>No store has your game? Pick the running program. Its icon is added automatically.</p></div>
+      <div class="card reveal"><div class="ico"><svg viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><circle cx="6" cy="7" r="1.3"/><path d="M3 12l3.5-3 2.5 2 2-1.5L14 12"/></svg></div><h3>Your own icons</h3><p>Drop, paste or pick any image, then zoom, move and rotate it. The status line is yours to write.</p></div>
+      <div class="card reveal"><div class="ico"><svg viewBox="0 0 16 16"><rect x="1.8" y="5" width="12.4" height="6" rx="3"/><path d="M5.5 8h5"/></svg></div><h3>Buttons</h3><p>Add up to two buttons to your presence, like "Get on Steam". Other people see them.</p></div>
+      <div class="card reveal"><div class="ico"><svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.2"/></svg></div><h3>My Games</h3><p>Launch a game in one click, keep your hours played, and give every game its own banner.</p></div>
+      <div class="card reveal"><div class="ico"><svg viewBox="0 0 16 16"><path d="M4 2.5h8a.5.5 0 01.5.5v10.5L8 10.5l-4.5 3V3a.5.5 0 01.5-.5z"/></svg></div><h3>Saved apps</h3><p>Save a program once. The presence starts when it opens and stops when it closes.</p></div>
+      <div class="card reveal"><div class="ico"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 7.2v3.6M8 5v.1"/></svg></div><h3>Game info</h3><p>Descriptions, trailers, screenshots and ratings from the store, right inside the app.</p></div>
+      <div class="card reveal"><div class="ico"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><circle cx="5.6" cy="7" r=".9" fill="currentColor"/><circle cx="8.4" cy="5" r=".9" fill="currentColor"/><circle cx="10.8" cy="7.6" r=".9" fill="currentColor"/><path d="M8 14c-1.2 0-1.2-1.4-.3-2 1-.7 1.2-1.9-.2-2"/></svg></div><h3>Themes</h3><p>Five to choose from, plus one you design with your own three colors.</p></div>
+      <div class="card reveal"><div class="ico"><svg viewBox="0 0 16 16"><path d="M2.5 11.5h11M4 11.5V5.5h8v6M6.5 13.5h3"/></svg></div><h3>Stays out of the way</h3><p>Hide it in the system tray, and let it start with Windows if you like.</p></div>
+    </div>
+  </div></section>
+
+  <section id="how" style="padding-top:20px"><div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2>Three steps, about ten seconds.</h2>
+    <div class="steps">
+      <div class="step reveal"><div class="n">1</div><h3>Open Discord</h3><p>Keep the Discord desktop app open, with Activity Status turned on.</p></div>
+      <div class="step reveal"><div class="n">2</div><h3>Pick your game</h3><p>Search for it, or choose the program that's running right now.</p></div>
+      <div class="step reveal"><div class="n">3</div><h3>Press Start</h3><p>It shows on your profile. Press Stop whenever you want it gone.</p></div>
+    </div>
+  </div></section>
+
+  <section id="screens"><div class="wrap">
+    <div class="eyebrow">Take a look</div>
+    <h2>Built to feel like a real app.</h2>
+    <div class="tabs" role="tablist" id="tabs">
+      <button class="tab on" role="tab" data-k="presence">Start</button>
+      <button class="tab" role="tab" data-k="games">My Games</button>
+      <button class="tab" role="tab" data-k="apps">Saved apps</button>
+      <button class="tab" role="tab" data-k="info">Game info</button>
+    </div>
+    <div class="shot">
+      <div class="win"><img id="shotimg" data-shot="presence" src="shots/rose/presence.webp" alt="" width="1290" height="870" loading="lazy"></div>
+      <p id="shotcap"></p>
+    </div>
+  </div></section>
+
+  <section id="themes" style="padding-top:20px"><div class="wrap">
+    <div class="eyebrow">Make it yours</div>
+    <h2>Pick a look. This page follows.</h2>
+    <p class="lead">Same themes as the app. Click a theme to try it. Hover a color to see its hex code.</p>
+    <div class="themes" id="themegrid"></div>
+    <p class="note">The app also has a sixth theme that you design yourself: choose a name and three colors, and it works out the rest.</p>
+  </div></section>
+
+  <section id="faq"><div class="wrap">
+    <div class="eyebrow">Questions</div>
+    <h2>Good to know.</h2>
+    <div class="faq">
+      <details class="acc"><summary>Does it need Discord to be open?<svg viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>Yes, the Discord desktop app has to be open on the same computer, with Activity Status on. If it's closed when you press Start, the game is still added to My Games, and the presence starts as soon as Discord opens.</p></div></details>
+      <details class="acc"><summary>Is it free? Do I need an account or a key?<svg viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>It's free, and there's nothing to sign up for. ANY-PRESENCE comes with its own Discord application. A free ImgBB key is optional: it only lets your own images and program icons show on Discord.</p></div></details>
+      <details class="acc"><summary>Windows says it's a virus. Is it?<svg viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>No, but Windows and some antivirus programs often warn about new apps like this one. The app isn't code-signed (that costs money), it can start with Windows, and it reads your running programs to find the game you're playing. All of that makes antivirus programs wary.</p><p>You don't have to take my word for it: <a href="https://github.com/ih3l/ANY-PRESENCE-releases">all of the code is public</a>, so you can read it, have someone you trust review it, or build your own copy. If Windows blocks it, click <b>More info</b>, then <b>Run anyway</b>.</p></div></details>
+      <details class="acc"><summary>What does it send over the internet?<svg viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>Everything runs on your computer. The app only contacts the game stores you search, ImgBB (only if you add a key), Discord, and GitHub (to check for updates). Your settings, My Games list and hours played stay on your PC.</p></div></details>
+      <details class="acc"><summary>Does it work on Mac or Linux?<svg viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>Not for now. ANY-PRESENCE is for Windows only.</p></div></details>
+    </div>
+  </div></section>
+
+  <section id="download" style="padding-top:20px"><div class="wrap">
+    <div class="band">
+      <h2>Ready to show what you're playing?</h2>
+      <p class="lead">One file, no installer. Download it, open it, press Start.</p>
+      <div class="cta"><a class="btn primary" href="https://github.com/ih3l/ANY-PRESENCE-releases/releases/latest/download/ANY-PRESENCE.exe"><svg viewBox="0 0 16 16"><path d="M8 2.5v8M4.8 7.6L8 10.8l3.2-3.2M3 13h10"/></svg>Download for Windows</a><a class="btn ghost" href="https://github.com/ih3l/ANY-PRESENCE-releases/releases">All versions</a></div>
+    </div>
+  </div></section>
+
+  <footer><div class="wrap">
+    <p>ANY-PRESENCE is an independent project. It isn't affiliated with Discord, Valve, GOG, Apple or any other store. All names and logos belong to their owners.</p>
+    <nav><a href="https://github.com/ih3l/ANY-PRESENCE-releases">GitHub</a><a href="https://github.com/ih3l/ANY-PRESENCE-releases/releases">Releases</a></nav>
+  </div></footer>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const THEMES=[
+ {id:"rose",name:"Rose",c:["#140C11","#1C1218","#F49AC2"]},
+ {id:"violet",name:"Violet",c:["#0B0A12","#131221","#7C5CFF"]},
+ {id:"graphite",name:"Graphite",c:["#0C0C0D","#151516","#6EA8FE"]},
+ {id:"paper",name:"Paper",c:["#F5F4F0","#FFFFFF","#4F46E5"]},
+ {id:"blush",name:"Blush",c:["#FFF5F8","#FFFFFF","#F49AC2"]}];
+const CAP={presence:"Search a game, pick the result, and press Start. Everything on the card can be edited.",games:"Every game you start is kept here, with your hours played, a banner, and a one-click Play.",apps:"Saved apps turn the presence on by themselves when the program opens.",info:"Click a game's title to read about it, with trailers and screenshots one tab away."};
+let theme="rose", shot="presence";
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
+function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove("on"),1600)}
+function paintShots(){ $$("img[data-shot]").forEach(i=>{ const k=i.id==="shotimg"?shot:i.dataset.shot; i.src=`shots/${theme}/${k}.webp` }); $("#shotimg").alt=({presence:"The Start page",games:"The My Games page",apps:"The Saved apps page",info:"The game info window"})[shot]; $("#shotcap").textContent=CAP[shot] }
+function setTheme(id,save=true){ if(!THEMES.some(t=>t.id===id)) id="rose"; theme=id; document.documentElement.dataset.theme=id;
+  $$(".dot").forEach(d=>d.classList.toggle("on",d.dataset.id===id)); $$(".th").forEach(d=>d.classList.toggle("on",d.dataset.id===id)); paintShots();
+  if(save){ try{ localStorage.setItem("ap-theme",id) }catch(e){} } }
+// theme dots + cards
+THEMES.forEach(t=>{
+  const d=document.createElement("button"); d.className="dot"; d.dataset.id=t.id; d.title=t.name; d.setAttribute("aria-label",t.name+" theme"); d.style.background=`linear-gradient(135deg,${t.c[0]} 50%,${t.c[2]} 50%)`; d.onclick=()=>setTheme(t.id); $("#dots").append(d);
+  const c=document.createElement("div"); c.className="th"; c.dataset.id=t.id; c.tabIndex=0; c.setAttribute("role","button"); c.setAttribute("aria-label",t.name+" theme");
+  c.innerHTML=`<div class="sw">${t.c.map(h=>`<i data-hex="${h}" style="background:${h}"></i>`).join("")}</div><span>${t.name}</span>`;
+  c.onclick=()=>setTheme(t.id);
+  c.onkeydown=e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); setTheme(t.id) } }; $("#themegrid").append(c); });
+// screenshot tabs
+$$(".tab").forEach(b=>b.onclick=()=>{ shot=b.dataset.k; $$(".tab").forEach(x=>x.classList.toggle("on",x===b)); paintShots() });
+// rail follows the section on screen
+const secs=["top","features","screens","themes","faq","download"].map(id=>document.getElementById(id));
+const io=new IntersectionObserver(es=>es.forEach(e=>{ if(e.isIntersecting){ $$(".rb").forEach(r=>r.classList.toggle("on",r.dataset.s===e.target.id)) } }),{rootMargin:"-45% 0px -50% 0px"});
+secs.forEach(s=>s&&io.observe(s));
+const rv=new IntersectionObserver(es=>es.forEach(e=>{ if(e.isIntersecting){ e.target.classList.add("in"); rv.unobserve(e.target) } }),{threshold:.12});
+$$(".reveal").forEach(e=>rv.observe(e));
+// the presence card counts up, like on Discord
+let secsPlayed=4521; setInterval(()=>{ secsPlayed++; const h=Math.floor(secsPlayed/3600),m=Math.floor(secsPlayed%3600/60),s=secsPlayed%60; $("#tick").textContent=[h,m,s].map(n=>String(n).padStart(2,"0")).join(":")+" elapsed" },1000);
+// latest version number
+fetch("https://api.github.com/repos/ih3l/ANY-PRESENCE-releases/releases/latest").then(r=>r.ok?r.json():null).then(j=>{ if(j&&j.tag_name) $("#ver").textContent=`Version ${j.tag_name.replace(/^v/,"")} · Windows 10 and 11` }).catch(()=>{});
+let saved=null; try{ saved=localStorage.getItem("ap-theme") }catch(e){}
+setTheme(saved||"rose",false);
+</script>
+</body>
+</html>
