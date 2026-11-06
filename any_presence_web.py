@@ -48,7 +48,7 @@ def apply_network(mode):
 
 APP_NAME = "ANY-PRESENCE"
 WINDOW_SIZE = (860, 580)  # the window has one fixed size
-APP_VERSION = "1.2.2" # app version @_@
+APP_VERSION = "1.2.3" # app version @_@
 DEFAULT_APP_ID = "1557320467474292756"  # used unless the person adds their own in Settings
 UPDATE_REPO = "ih3l/ANY-PRESENCE-releases"  # public repo used to check for the updates
 UPDATE_ASSET = "ANY-PRESENCE.exe"
@@ -1480,6 +1480,14 @@ class SingleInstance:
             k32.WaitForSingleObject.restype = ctypes.c_uint32
             self._k32 = k32
             self._mutex = k32.CreateMutexW(None, False, self.MUTEX)
+            if ctypes.get_last_error() == 183 and "--updated" in sys.argv:
+                # just updated: the old copy is closing, so wait for it instead of treating this as a second launch
+                for _ in range(100):
+                    k32.CloseHandle(self._mutex)
+                    time.sleep(0.1)
+                    self._mutex = k32.CreateMutexW(None, False, self.MUTEX)
+                    if ctypes.get_last_error() != 183:
+                        break
             if ctypes.get_last_error() == 183:  # ERROR_ALREADY_EXISTS
                 self.is_primary = False
                 handle = k32.OpenEventW(0x0002, False, self.EVENT)  # EVENT_MODIFY_STATE
@@ -1661,10 +1669,11 @@ class Api:
             bat = Path(tempfile.gettempdir()) / "any_presence_update.bat"
             esc = lambda path: str(path).replace("%", "%%")  # a % in a folder name must survive the script
             bat.write_text(  # UTF-8 with the console switched to it, so folders with accents (José, Ñandú...) work
-                "@echo off\r\nchcp 65001 >nul\r\nset n=0\r\n:wait\r\nping 127.0.0.1 -n 2 >nul\r\n"
-                f'move /y "{esc(new)}" "{esc(exe)}" >nul 2>&1\r\n'
-                "if errorlevel 1 (\r\n set /a n+=1\r\n if %n% lss 30 goto wait\r\n exit /b 1\r\n)\r\n"
-                f'ping 127.0.0.1 -n 4 >nul\r\nstart "" "{esc(exe)}"\r\ndel "%~f0"\r\n', encoding="utf-8")
+                "@echo off\r\nchcp 65001 >nul\r\nset n=0\r\n:wait\r\n"
+                f'move /y "{esc(new)}" "{esc(exe)}" >nul 2>&1\r\n'  # works the moment the old app has closed
+                "if not errorlevel 1 goto go\r\nset /a n+=1\r\nif %n% geq 100 exit /b 1\r\n"
+                "ping 192.0.2.1 -n 1 -w 150 >nul\r\ngoto wait\r\n:go\r\n"
+                f'start "" "{esc(exe)}" --updated\r\ndel "%~f0"\r\n', encoding="utf-8")
             self._push("update_progress", {"stage": "restart", "pct": 100})
             env = clean_env()
             si = subprocess.STARTUPINFO()
@@ -1679,7 +1688,7 @@ class Api:
             except Exception:
                 pass
             return {"error": f"Update failed: {e}"}
-        threading.Timer(1.5, self._quit_app).start()
+        threading.Timer(0.4, self._quit_app).start()
         return {"ok": True}
 
     def _update_check_later(self):
@@ -2297,8 +2306,7 @@ class Api:
                 break
         else:
             apps.append(new)
-        self._record_recent(new, {"proc": proc, "exe": new["exe"], "ref": new.get("ref")}, touch=False)
-        save_config(self._cfg)
+        save_config(self._cfg)  # a saved app and its My Games entry are separate: saving one leaves the other as it was
         live = (self._auto_entry or {}).get("proc", "").lower() == proc.lower() or (self._game_proc or "").lower() == proc.lower()
         if self._running and live:  # this app's presence is on right now: show the change at once
             try:
