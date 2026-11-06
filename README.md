@@ -6,6 +6,10 @@ Pick a game, and ANY-PRESENCE sets its title, cover and status on your profile. 
 
 <img width="844" height="541" alt="image" src="https://github.com/user-attachments/assets/e4fb3278-f256-401d-bc06-d7b664668d05" />
 
+## DEMO
+
+- You can check this [ANY-PRESENCE website](https://ih3l.github.io/ANY-PRESENCE-releases/) to try a demo of the app!
+
 ## Features
 
 - **Search** Steam, GOG, VNDB, DLsite, Wikipedia, Lutris and the Internet Archive to find the right title and cover
@@ -16,10 +20,6 @@ Pick a game, and ANY-PRESENCE sets its title, cover and status on your profile. 
 - **My Games:** play or launch a game in one click and track your hours played.
 - **Game info:** click a game's title in My Games or in the search results to see its store page info (description, screenshots, trailers, ratings and details) from Steam, GOG, DLsite or VNDB.
 - **Themes:** five to choose from, plus one you design yourself.
-
-## DEMO
-
-- You can check this [ANY-PRESENCE website](https://ih3l.github.io/ANY-PRESENCE-releases/) to try a demo of the app!
 
 ## Setup
 
