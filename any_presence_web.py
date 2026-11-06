@@ -48,7 +48,7 @@ def apply_network(mode):
 
 APP_NAME = "ANY-PRESENCE"
 WINDOW_SIZE = (860, 580)  # the window has one fixed size
-APP_VERSION = "1.2.1" # app version @_@
+APP_VERSION = "1.2.2" # app version @_@
 DEFAULT_APP_ID = "1557320467474292756"  # used unless the person adds their own in Settings
 UPDATE_REPO = "ih3l/ANY-PRESENCE-releases"  # public repo used to check for the updates
 UPDATE_ASSET = "ANY-PRESENCE.exe"
@@ -538,6 +538,37 @@ def search_gog(term, nsfw):
     return out, 0
 
 
+APPSTORE_SEARCH = "https://itunes.apple.com/search"
+APPSTORE_LOOKUP = "https://itunes.apple.com/lookup"
+
+
+def appstore_name(name):
+    """The game's name without the store's tagline: "Brown Dust 2 - Idle RPG" -> "Brown Dust 2"."""
+    head = re.split(r"\s[-\u2013\u2014]\s", str(name or "").strip(), maxsplit=1)[0].strip()
+    return head if len(head) >= 3 else str(name or "?").strip()
+
+
+def search_appstore(term, nsfw):
+    """Mobile games from Apple's App Store (free search, no key). Many have a PC version that isn't on any PC store."""
+    items = http_get(APPSTORE_SEARCH, params={"term": term, "entity": "software", "country": "us", "limit": 15}).json().get("results", [])
+    wanted = significant_tokens(term)
+    out = []
+    for it in items:
+        name = it.get("trackName") or ""
+        if "Games" not in (it.get("genres") or []) or not it.get("trackId"):
+            continue
+        title = appstore_name(name)
+        if not title_matches(name, wanted) and not title_matches(title, wanted):
+            continue
+        icon = it.get("artworkUrl512") or it.get("artworkUrl100")
+        link = (it.get("trackViewUrl") or "").split("?")[0] or None
+        out.append(Result(title, icon, "App Store", it.get("artworkUrl100") or icon, link, None, None,
+                          {"s": "appstore", "id": str(it["trackId"]), "name": title}))
+        if len(out) == 6:
+            break
+    return out, 0
+
+
 VNDB_API = "https://api.vndb.org/kana/vn"
 
 
@@ -738,6 +769,7 @@ DEFAULT_OFF = set()  # sources that start switched off
 SOURCES = {
     "steam": ("Steam", search_steam),
     "gog": ("GOG", search_gog),
+    "appstore": ("App Store", search_appstore),
     "vndb": ("VNDB", search_vndb),
     "dlsite": ("DLsite (beta)", search_dlsite),
     "wikipedia": ("Wikipedia", search_wikipedia),
@@ -757,8 +789,8 @@ IGNORE = {
 
 
 # ---- game info window (Steam, GOG, DLsite, VNDB)
-INFO_SOURCES = ("steam", "gog", "dlsite", "vndb")
-INFO_HOSTS = ("store.steampowered.com", "www.gog.com", "www.dlsite.com", "vndb.org", "www.youtube.com", "youtu.be")
+INFO_SOURCES = ("steam", "gog", "dlsite", "vndb", "appstore")
+INFO_HOSTS = ("store.steampowered.com", "www.gog.com", "www.dlsite.com", "vndb.org", "apps.apple.com", "www.youtube.com", "youtu.be")
 GOG_PRODUCT = "https://api.gog.com/products/{}"
 
 
@@ -788,15 +820,25 @@ def ref_from_entry(e):
     if m:
         return {"s": "steam", "id": m.group(1)}
     for b in e.get("buttons") or []:
-        url = str((b or {}).get("url") or "")
-        if m := re.search(r"store\.steampowered\.com/app/(\d+)", url):
-            return {"s": "steam", "id": m.group(1)}
-        if m := re.search(r"gog\.com/(?:[a-z]{2}/)?game/([\w-]+)", url):
-            return {"s": "gog", "id": m.group(1)}
-        if m := re.search(r"vndb\.org/(v\d+)", url):
-            return {"s": "vndb", "id": m.group(1)}
-        if m := re.search(r"dlsite\.com/([a-z]+)/work/=/product_id/([A-Z]{2}\d+)", url):
-            return {"s": "dlsite", "id": m.group(2), "site": m.group(1)}
+        ref = ref_from_url(str((b or {}).get("url") or ""))
+        if ref:
+            return ref
+    return None
+
+
+def ref_from_url(url):
+    """The store page a pasted link points to (Steam, GOG, VNDB, DLsite or the App Store), else None."""
+    url = str(url or "")
+    if m := re.search(r"store\.steampowered\.com/app/(\d+)", url):
+        return {"s": "steam", "id": m.group(1)}
+    if m := re.search(r"gog\.com/(?:[a-z]{2}/)?game/([\w-]+)", url):
+        return {"s": "gog", "id": m.group(1)}
+    if m := re.search(r"vndb\.org/(v\d+)", url):
+        return {"s": "vndb", "id": m.group(1)}
+    if m := re.search(r"dlsite\.com/([a-z]+)/work/=/product_id/([A-Z]{2}\d+)", url):
+        return {"s": "dlsite", "id": m.group(2), "site": m.group(1)}
+    if m := re.search(r"apps\.apple\.com/.*?/id(\d+)", url):
+        return {"s": "appstore", "id": m.group(1)}
     return None
 
 
@@ -812,6 +854,13 @@ def find_ref(title, nsfw):
         pass
     try:
         res, _, _ = run_source(search_gog, title, nsfw)
+        hit = _closest(res, title, key=lambda r: r.title)
+        if hit and hit.ref:
+            return hit.ref
+    except Exception:
+        pass
+    try:
+        res, _, _ = run_source(search_appstore, title, nsfw)
         hit = _closest(res, title, key=lambda r: r.title)
         if hit and hit.ref:
             return hit.ref
@@ -1039,7 +1088,28 @@ def info_vndb(ref, nsfw, title):
     }
 
 
-INFO_LOADERS = {"steam": info_steam, "gog": info_gog, "dlsite": info_dlsite, "vndb": info_vndb}
+def info_appstore(ref, nsfw, title):
+    items = http_get(APPSTORE_LOOKUP, params={"id": ref["id"], "country": "us"}).json().get("results", [])
+    d = next((i for i in items if str(i.get("trackId")) == ref["id"]), None)
+    if not d:
+        return None
+    text = plain_text(d.get("description"), 3500)
+    rating, votes = d.get("averageUserRating"), d.get("userRatingCount") or 0
+    reviews = [{"label": "App Store", "text": f"{rating:.1f} / 5", "pct": round(rating / 5 * 100), "count": int(votes)}] if rating and votes else []
+    devices = "iPhone, iPad" if d.get("ipadScreenshotUrls") else "iPhone"
+    media = [{"type": "image", "thumb": u, "url": u} for u in (d.get("screenshotUrls") or d.get("ipadScreenshotUrls") or [])[:12]]
+    return {
+        "source": "App Store", "title": appstore_name(d.get("trackName")) or title, "url": (d.get("trackViewUrl") or "").split("?")[0] or None,
+        "cover": d.get("artworkUrl512"), "tagline": first_paragraph(text), "about": text,
+        "reviews": reviews, "scores": [],
+        "details": rows(("Genres", join([g for g in d.get("genres") or [] if g != "Games"])), ("Developer", d.get("sellerName")),
+                        ("Release date", str(d.get("releaseDate") or "")[:10]), ("Price", d.get("formattedPrice")),
+                        ("Age rating", d.get("contentAdvisoryRating")), ("Platforms", f"iOS ({devices})")),
+        "tags": [], "media": media, "adult": False, "hidden": False,
+    }
+
+
+INFO_LOADERS = {"steam": info_steam, "gog": info_gog, "dlsite": info_dlsite, "vndb": info_vndb, "appstore": info_appstore}
 
 
 def parse_version(tag):
@@ -1781,6 +1851,8 @@ class Api:
                  "buttons": clean_buttons(p.get("buttons")), "banner": str(p.get("banner") or "") or None, "proc": proc or None,
                  "exe": str(orig.get("exe") or "") or None, "launch": launch, "last": int(time.time())}
         old = next((r for r in self._cfg["recent"] if r["key"] == key), None)
+        if old and old.get("ref_pinned") and old.get("ref"):  # a page the person chose by hand stays
+            entry["ref"], entry["ref_pinned"] = old["ref"], True
         # total seconds the program has been seen running: remembered even if the game was removed before
         entry["played"] = max((old or {}).get("played", 0), self._cfg["playtime"].get(proc.lower(), 0))
         if old and old.get("banner_custom"):  # a banner the person chose stays
@@ -1815,6 +1887,15 @@ class Api:
         if not str(payload.get("proc") or "").strip():
             return {"error": "Choose the running program first."}
         p = {k: payload.get(k) for k in ("title", "icon", "extra", "buttons", "banner", "ref")}
+        key = str(payload.get("proc")).strip().lower()
+        if any(r["key"] == key for r in self._cfg["recent"]):  # already there: save the changes where it is
+            if str(p.get("icon") or "").startswith("data:"):
+                try:
+                    p["icon"] = self._prepare({"icon": p["icon"]})["icon"]
+                except Exception:
+                    p["icon"] = None
+            self._record_recent(p, payload, touch=False)
+            return {"added": False, "recent": self._cfg["recent"]}
         added = self._record_recent(p, payload, add=True)
         return {"added": added, "recent": self._cfg["recent"]}
 
@@ -1892,7 +1973,7 @@ class Api:
             ref = ref_from_entry(e)
             if not ref:
                 ref = find_ref(e["title"], self._cfg["nsfw"])
-                if ref:  # remembered, so the next click is quick
+                if ref and ref["s"] != "dlsite":  # remembered, so the next click is quick (a DLsite guess is too shaky to keep)
                     e["ref"] = ref
                     save_config(self._cfg)
             return self._load_info(ref, e["title"])
@@ -1900,6 +1981,24 @@ class Api:
             return {"error": "Couldn't reach the store. Check your connection and try again."}
         except Exception as ex:
             return {"error": f"Couldn't load the info: {ex}"}
+
+    def set_game_ref(self, key, url):
+        """The person says which store page a game really is, by pasting its link. Returns that page's info."""
+        e = next((r for r in self._cfg["recent"] if r["key"] == key), None)
+        if not e:
+            return {"error": "That game isn't in the list any more."}
+        ref = ref_from_url(str(url or "").strip()[:400])
+        if not ref:
+            return {"error": "That isn't a link to a Steam, GOG, DLsite, VNDB or App Store game."}
+        try:
+            info = self._load_info(ref, e["title"])
+        except Exception:
+            return {"error": "Couldn't open that page. Check the link and your connection."}
+        if info.get("none") or info.get("error"):
+            return {"error": "Couldn't read that page. Check the link."}
+        e["ref"], e["ref_pinned"] = ref, True
+        save_config(self._cfg)
+        return info
 
     def game_info_ref(self, ref, title):
         """The same info window for a search result (a game that isn't in My Games)."""
@@ -2052,14 +2151,25 @@ class Api:
                 self._cfg["playtime"][r["proc"].lower()] = r["played"]
                 open_now.add(r["key"])
                 changed = True
-        closed = (self._pt_open or set()) - open_now
+        before = self._pt_open or set()
+        closed, opened = before - open_now, open_now - before
         self._pt_open = open_now
-        if closed:  # the game closed last becomes the one to continue
+        if closed or opened:
+            # the page learns which games are running right away, even if it was asleep in the tray
+            self._push("running", sorted(open_now))
+            # a game that just opened or closed becomes the one to continue (the newest on top)
             now_i = int(now)
-            gone = [r for r in self._cfg["recent"] if r["key"] in closed]
-            for r in gone:
-                r["last"] = now_i
-            self._cfg["recent"] = gone + [r for r in self._cfg["recent"] if r["key"] not in closed]
+            by_key = {r["key"]: r for r in self._cfg["recent"]}
+            moved = (closed | opened) & set(by_key)  # a game removed meanwhile is skipped
+
+            def when(k):
+                if k in opened:
+                    return self._game_started(by_key[k].get("proc")) or now_i
+                return now_i
+            order = sorted(moved, key=when, reverse=True)
+            for k in order:
+                by_key[k]["last"] = now_i
+            self._cfg["recent"] = [by_key[k] for k in order] + [r for r in self._cfg["recent"] if r["key"] not in moved]
             save_config(self._cfg)
             self._pt_saved = now
             self._push("recent", self._cfg["recent"])

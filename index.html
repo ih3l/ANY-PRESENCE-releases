@@ -374,6 +374,10 @@ input::placeholder{color:var(--muted)}
 .info-lead{font-size:14px;line-height:1.55;color:var(--text);user-select:text;-webkit-user-select:text}
 .info-text{color:var(--soft);line-height:1.6;white-space:pre-wrap;user-select:text;-webkit-user-select:text}
 .info-note{color:var(--muted);font-size:12.5px}
+.fixrow{display:flex;gap:8px;flex-wrap:wrap;padding:0 18px 12px;flex:none}.fixrow[hidden]{display:none}
+.fixrow input{flex:1;min-width:0;height:34px;font-size:12.5px;padding:0 12px;border-radius:10px;background:var(--input);border:1px solid var(--border)}
+.fixrow input:focus{border-color:var(--accent-on);outline:0}
+.fixmsg{width:100%;font-size:12px;color:var(--err)}.fixmsg:empty{display:none}
 .info-col h4{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:-6px}
 .info-card{border:1px solid var(--border);border-radius:12px;background:var(--input);overflow:hidden;flex:none}
 .info-card .rw{display:flex;justify-content:space-between;gap:12px;padding:9px 12px;border-top:1px solid var(--border);font-size:12.5px}
@@ -637,8 +641,10 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
 <!-- game info -->
 <div class="overlay" id="infomodal"><div class="modal info">
   <div class="info-head"><div class="ic" id="infoic"></div><div class="tt"><h2 id="infotitle"></h2><span class="chip" id="infochip" hidden></span></div>
+    <button class="btn sm ghost" id="infofix" hidden>Wrong game?</button>
     <button class="btn sm ghost" id="infolink" hidden>Open page</button>
     <button class="icon-btn" id="infox" aria-label="Close" title="Close"><svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg></button></div>
+  <div class="fixrow" id="fixrow" hidden><input id="fixurl" placeholder="Paste the right game's store link (Steam, GOG, DLsite, VNDB or App Store)" spellcheck="false" autocomplete="off"><button class="btn sm" id="fixgo">Use this page</button><div class="fixmsg" id="fixmsg"></div></div>
   <div id="infobody"></div>
 </div></div>
 
@@ -669,7 +675,7 @@ const api = () => window.pywebview.api;
 const S = {buttons:[], btnAuto:false, selected:null, iconEdit:null, program:null, running:false, startedAt:null, cfg:{}};
 
 /* ---------- the small label on the preview card ---------- */
-const CHIP_COLOR={steam:"#6aa7e0",gog:"#c9a5f0",vndb:"#8fd6b0",dlsite:"#f0b58c",wikipedia:"#c5cdd6",lutris:"#f0a35c",archive:"#e8d08a",
+const CHIP_COLOR={steam:"#6aa7e0",gog:"#c9a5f0",vndb:"#8fd6b0",dlsite:"#f0b58c",wikipedia:"#c5cdd6",lutris:"#f0a35c",archive:"#e8d08a",appstore:"#9fa8ff",
   "saved app":"#b8a9f0",recent:"#9fb4d8","running program":"#7dd3fc",custom:"#e8d08a"};
 const CHIP_ICON={"saved app":'<svg viewBox="0 0 16 16"><path d="M4 2.5h8v11L8 10.5l-4 3z"/></svg>',
   recent:'<svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.2"/></svg>',
@@ -691,6 +697,7 @@ const ICONS={
   vndb:'<svg viewBox="0 0 16 16"><path d="M3 2.5h7.5a2 2 0 012 2v9H5a2 2 0 01-2-2z"/><path d="M3 11.5a2 2 0 012-2h7.5"/></svg>',
   dlsite:'<svg viewBox="0 0 16 16"><path d="M3 5h10l-.7 8.5H3.7z"/><path d="M5.5 5V4a2.5 2.5 0 015 0v1"/></svg>',
   wikipedia:'<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/></svg>',
+  appstore:'<svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="3.2"/><path d="M5.4 11.2L8 4.8l2.6 6.4M6.5 9.3h3"/></svg>',
   lutris:'<svg viewBox="0 0 16 16"><path d="M3 7a2 2 0 012-2h6a2 2 0 012 2v1a3 3 0 01-3 3H6a3 3 0 01-3-3z"/><path d="M6 7.5v2M5 8.5h2M10.5 8h.01M11.5 9h.01"/></svg>',
   archive:'<svg viewBox="0 0 16 16"><path d="M2 5.5L8 2l6 3.5"/><path d="M3.5 6v6M6.5 6v6M9.5 6v6M12.5 6v6M2 13.5h12"/></svg>',
   nsfw:'<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><text x="8" y="10.3" text-anchor="middle" font-size="6" font-weight="700" fill="currentColor" stroke="none" font-family="sans-serif">18+</text></svg>',
@@ -705,7 +712,7 @@ const FAV={steam:"https://store.steampowered.com/favicon.ico",gog:"https://www.g
   dlsite:"https://www.dlsite.com/favicon.ico",wikipedia:"https://en.wikipedia.org/static/favicon/wikipedia.ico",
   lutris:"https://lutris.net/favicon.ico",archive:"https://archive.org/favicon.ico"};
 const iconHTML = key => FAV[key] ? `<img src="${FAV[key]}" referrerpolicy="no-referrer" alt="" onerror="FAV['${key}']=null;this.outerHTML=ICONS['${key}']">` : (ICONS[key]||"");
-const srcKey = name => { const k=(name||"").toLowerCase().replace(/ \(.*/,"").trim(); return k==="internet archive" ? "archive" : k };
+const srcKey = name => { const k=(name||"").toLowerCase().replace(/ \(.*/,"").trim(); return k==="internet archive" ? "archive" : k==="app store" ? "appstore" : k };
 const srcIcon = name => ICONS[srcKey(name)] ? `<span class="src">${iconHTML(srcKey(name))}${esc(name)}</span>` : esc(name);
 
 /* ---------- helpers ---------- */
@@ -734,13 +741,22 @@ function sourceKind(){
   if (S.program) return "Running program";
   return ($("#title").value.trim() || $("#iconurl").value.trim()) ? "Custom" : "";
 }
+const kept={}; // the icon sent with the last save, since a hosted icon no longer looks like the one in the editor
+function differs(e,kind,name){ // has the card changed since this entry was saved?
+  const p=payload(), same=(x,y)=>(x||"")===(y||"");
+  const icon=p.icon===e.icon||same(p.icon,kept[kind+name])||(!p.icon&&!e.icon);
+  return !(same(p.title,e.title)&&same(p.extra,e.extra)&&JSON.stringify(p.buttons)===JSON.stringify(e.buttons||[])&&icon);
+}
 function updateKeep(){
   const name=(S.program&&S.program.name||"").toLowerCase(), has=!!name;
-  const inGames=has&&(S.cfg.recent||[]).some(r=>(r.proc||r.key||"").toLowerCase()===name);
-  const saved=has&&(S.cfg.apps||[]).some(a=>(a.proc||"").toLowerCase()===name);
+  const game=has&&(S.cfg.recent||[]).find(r=>(r.proc||r.key||"").toLowerCase()===name);
+  const app=has&&(S.cfg.apps||[]).find(a=>(a.proc||"").toLowerCase()===name);
+  const gUp=!!game&&differs(game,"g",name), aUp=!!app&&differs(app,"a",name);
   const g=$("#addgame"), a=$("#saveapp");
-  g.classList.toggle("on",inGames); g.classList.toggle("dim",!has); g.querySelector("span").textContent=inGames?"In My Games":"Add to My Games"; g.title=inGames?"Already in My Games":"Add this game to My Games without starting it";
-  a.classList.toggle("on",saved); a.classList.toggle("dim",!has); a.querySelector("span").textContent=saved?"Saved":"Save app"; a.title=saved?"Saved. Click to update it":"Save it to start by itself when the program opens";
+  g.classList.toggle("on",!!game&&!gUp); g.classList.toggle("dim",!has); g.querySelector("span").textContent=gUp?"Update My Game":game?"In My Games":"Add to My Games";
+  g.title=gUp?"Save your changes to this game in My Games":game?"Already in My Games":"Add this game to My Games without starting it";
+  a.classList.toggle("on",!!app&&!aUp); a.classList.toggle("dim",!has); a.querySelector("span").textContent=aUp?"Update saved app":app?"Saved":"Save app";
+  a.title=aUp?"Save your changes to this saved app":app?"Saved":"Save it to start by itself when the program opens";
 }
 function renderCard(){
   updateKeep();
@@ -805,7 +821,7 @@ function resultRow(res){
   const b=el("button","btn sm","Use"); b.onclick=()=>{select(res); $$(".res").forEach(r=>r.classList.remove("sel")); row.classList.add("sel")};
   row.append(img,t,b); return row;
 }
-const BTN_LABEL={Steam:"Get on Steam",GOG:"Get on GOG",VNDB:"View on VNDB",DLsite:"View on DLsite","DLsite (adult)":"View on DLsite"};
+const BTN_LABEL={Steam:"Get on Steam",GOG:"Get on GOG",VNDB:"View on VNDB",DLsite:"View on DLsite","DLsite (adult)":"View on DLsite","App Store":"Get on the App Store"};
 function select(res){
   S.selected=res; S.iconEdit=null;
   if(!S.buttons.some(b=>b.label||b.url) || S.btnAuto){ // the result's own link is offered as a button, unless the person set theirs
@@ -1055,6 +1071,8 @@ async function pollRunning(){
     if(now.size!==runKeys.size||[...now].some(x=>!runKeys.has(x))){ runKeys=now; renderRecent() } }catch(e){}
 }
 setInterval(pollRunning,3000);
+document.addEventListener("visibilitychange",()=>{ if(!document.hidden){ pollRunning(); refreshRecent() } }); // coming back from the tray
+window.addEventListener("focus",()=>{ pollRunning(); refreshRecent() });
 function playedText(r,short){
   const sec=r.played||0; if(sec<60) return "";
   const h=sec/3600, t=h<1?`${Math.floor(sec/60)} min`:`${h<10?h.toFixed(1).replace(/\.0$/,""):Math.round(h)} h`;
@@ -1116,7 +1134,19 @@ function stopVideo(keepFs){
 function closeInfo(){ infoSeq++; stopVideo(); $("#infomodal").classList.remove("on") }
 $("#infox").onclick=closeInfo;
 $("#infomodal").onmousedown=e=>{ if(e.target.id==="infomodal") closeInfo() };
+let infoCur=null;
+function fixOpen(on){ $("#fixrow").hidden=!on; $("#fixmsg").textContent=""; if(on) $("#fixurl").focus() }
+$("#infofix").onclick=()=>fixOpen($("#fixrow").hidden);
+async function fixGo(){
+  const url=$("#fixurl").value.trim(); if(!url||!infoCur||!infoCur.key) return;
+  const b=$("#fixgo"); b.disabled=true; $("#fixmsg").textContent="";
+  let d; try{ d=await api().set_game_ref(infoCur.key,url) }catch(e){} b.disabled=false;
+  if(!d||d.error){ $("#fixmsg").textContent=(d&&d.error)||"Couldn't load that page."; return }
+  $("#fixurl").value=""; fixOpen(false); infoSeq++; renderInfo(infoCur,d);
+}
+$("#fixgo").onclick=fixGo; $("#fixurl").onkeydown=e=>{ if(e.key==="Enter") fixGo() };
 async function openInfo(r){
+  infoCur=r; $("#infofix").hidden=!r.key; fixOpen(false);
   const seq=++infoSeq; stopVideo();
   $("#infotitle").textContent=r.title; recentThumb(r,$("#infoic")); $("#infochip").hidden=true; $("#infolink").hidden=true;
   $("#infobody").innerHTML='<div class="info-pane one on"><div class="info-sk"></div></div>';
@@ -1253,7 +1283,7 @@ function infoTab(name){
 }
 function renderInfo(r,d){
   if(d.error){ infoState(d.error,()=>openInfo(r)); return }
-  if(d.none){ infoState("No store page found for this game."); return }
+  if(d.none){ infoState("No store page found for this game."); if(r.key) fixOpen(true); return }
   $("#infotitle").textContent=d.title||r.title;
   const chip=$("#infochip"); chip.hidden=false; setChip(chip,d.source,d.source);
   const link=$("#infolink"); link.hidden=!d.url; link.textContent="Open on "+d.source; link.onclick=()=>api().open_link(d.url);
@@ -1408,6 +1438,7 @@ window.onBackend=(ev,data)=>{
   else if(ev==="banner_options"){ if($("#bnmodal").classList.contains("on") && bnGame && data.key===bnGame.key){ data.options.forEach(addBanner); if(data.done) bnFinish() } }
   else if(ev==="pending_started"){S.running=true;S.startedAt=data.started_at;showActive(data);status(`Discord opened. ${data.title}: presence active`,"live")}
   else if(ev==="banner_ready"){setBanner(data.url,data.data)}
+  else if(ev==="running"){runKeys=new Set(data); if($("#page-recent").classList.contains("on")) renderRecent()}
   else if(ev==="recent"){S.cfg.recent=data; updateKeep(); if($("#page-recent").classList.contains("on")) renderRecent()}
   else if(ev==="update_available"){ const seen=S.cfg.update_later===data.version; showUpdate(data,!seen); if(seen) status(`Version ${data.version} is available. See Settings.`) }
   else if(ev==="status"){status(data,"err")}
@@ -1423,15 +1454,16 @@ async function saveApp(){
   const base=iconSource(); if(!base.startsWith("data:") && S.iconEdit && S.iconEdit.src===base){entry.icon_src=base; entry.icon_crop=S.iconEdit.view}
   const r=await api().save_app(entry);
   if(r.error){status(r.error,"err");return}
-  S.cfg.apps=r.apps; updateKeep(); status(`${r.verb} “${p.title}”.`);
+  kept["a"+S.program.name.toLowerCase()]=p.icon; S.cfg.apps=r.apps; updateKeep(); status(`${r.verb} “${p.title}”.`);
 }
 async function addGame(){
   if(!S.program){status("Choose the running program first.","err");return}
   const p=payload(); if(!p.title){status("Pick a result or a program first.","err");return}
   const r=await api().add_recent(p);
   if(r.error){status(r.error,"err");return}
+  kept["g"+S.program.name.toLowerCase()]=p.icon;
   S.cfg.recent=r.recent; updateKeep(); if($("#page-recent").classList.contains("on")) renderRecent();
-  status(r.added?`Added “${p.title}” to My Games.`:`“${p.title}” is already in My Games.`);
+  status(r.added?`Added “${p.title}” to My Games.`:`Updated “${p.title}” in My Games.`);
 }
 function renderApps(){
   updateKeep();
@@ -1669,6 +1701,7 @@ $("#q").addEventListener("input",()=>{
 });
 $("#go").onclick=search; $("#q").onkeydown=e=>{if(e.key==="Enter") search()};
 $("#clear").onclick=clearSelection;
+$("#extra").addEventListener("input",()=>updateKeep());
 let cardTimer; ["#title","#iconurl"].forEach(s=>$(s).oninput=()=>{clearTimeout(cardTimer); cardTimer=setTimeout(renderCard,350)});
 $("#min").onclick=()=>api().minimize(); $("#close").onclick=()=>api().close();
 document.addEventListener("keydown",e=>{ if(infoMedia.length>1&&$("#infomodal").classList.contains("on")&&$("#strip")&&$("#strip").closest(".info-pane.on")&&(e.key==="ArrowRight"||e.key==="ArrowLeft")&&!e.target.closest(".vp")){ stepMedia(e.key==="ArrowRight"?1:-1) }
