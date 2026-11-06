@@ -17,6 +17,10 @@ Pick a game, and ANY-PRESENCE sets its title, cover and status on your profile. 
 - **Game info:** click a game's title in My Games or in the search results to see its store page info (description, screenshots, trailers, ratings and details) from Steam, GOG, DLsite or VNDB.
 - **Themes:** five to choose from, plus one you design yourself.
 
+## DEMO
+
+- You can check this [ANY-PRESENCE website](https://ih3l.github.io/ANY-PRESENCE-releases/) to try a demo of the app!
+
 ## Setup
 
 1. Download `ANY-PRESENCE.exe` from the [latest release](../../releases/latest).
