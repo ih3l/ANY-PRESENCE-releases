@@ -48,11 +48,13 @@ def apply_network(mode):
 
 APP_NAME = "ANY-PRESENCE"
 WINDOW_SIZE = (860, 580)  # the window has one fixed size
-APP_VERSION = "1.2.3" # app version @_@
+APP_VERSION = "1.2.4" # app version @_@
 DEFAULT_APP_ID = "1557320467474292756"  # used unless the person adds their own in Settings
 UPDATE_REPO = "ih3l/ANY-PRESENCE-releases"  # public repo used to check for the updates
 UPDATE_ASSET = "ANY-PRESENCE.exe"
 START_HIDDEN = "--startup" in sys.argv  # set by the "start with Windows" entry
+UPDATER = "--updater" in sys.argv  # this copy of the .exe only runs the update window (see run_updater)
+UPDATER_EVENT = "Local\\ANY-PRESENCE-updater"
 
 # ---------------------------------------------------------------- engine (shared with the desktop version)
 HEADERS = {"User-Agent": f"ANY-PRESENCE/{APP_VERSION} (Discord Rich Presence tool)"}
@@ -1457,6 +1459,147 @@ def trim_memory():
         pass
 
 
+UPDATER_HTML = """<!doctype html><meta charset=utf-8><style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:__FRAME__;color:__TEXT__;font:13px/1.4 "Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;overflow:hidden;user-select:none;-webkit-user-select:none}
+body{border:1px solid __BORDER__;border-radius:14px;padding:18px;display:flex;flex-direction:column;-webkit-app-region:drag}
+h2{font-size:15px;font-weight:600;margin-bottom:6px}
+#msg{color:__SOFT__;min-height:36px}
+.bar{height:5px;border-radius:3px;background:__BORDER__;overflow:hidden;margin-top:auto}
+.bar i{display:block;width:40%;height:100%;border-radius:3px;background:__ACCENT__;animation:s 1.1s ease-in-out infinite}
+@keyframes s{0%{margin-left:-40%}100%{margin-left:100%}}
+.bar.stop{display:none}
+button{display:none;margin:auto 0 0 auto;height:34px;padding:0 16px;border:0;border-radius:10px;background:__ACCENT__;color:__ONACCENT__;font:inherit;font-weight:500;cursor:pointer;-webkit-app-region:no-drag}
+body.err button{display:block}body.err #msg{color:#f08a7a}
+</style><h2 id=t>Updating ANY-PRESENCE</h2><p id=msg>Starting…</p><div class=bar id=b><i></i></div>
+<button onclick="pywebview.api.close()">Close</button>
+<script>function say(m){document.getElementById('msg').textContent=m}
+function fail(m){say(m);document.body.classList.add('err');document.getElementById('b').classList.add('stop');document.getElementById('t').textContent='Update problem'}</script>"""
+
+
+def run_updater():
+    """Runs from a temporary copy of the .exe, in its own window. It waits for the app to close, swaps in the new
+    .exe, starts it, and closes itself once the new window is on screen. Nothing here depends on the new version."""
+    import ctypes
+    import re
+    import subprocess
+    import webview
+
+    args = {a[2:].split("=", 1)[0]: a.split("=", 1)[1] for a in sys.argv if a.startswith("--") and "=" in a}
+    exe, new = Path(args.get("exe", "")), Path(args.get("new", ""))
+    pid = int(args.get("pid", "0") or 0)
+    col = re.compile(r"^(#[0-9a-fA-F]{3,8}|rgba?\([0-9., %]+\))$")
+    c = {k: (args.get(k) if col.match(args.get(k, "")) else d) for k, d in
+         (("frame", "#1c1217"), ("border", "#3a2a33"), ("text", "#f4e9ee"), ("soft", "#a8939d"), ("accent", "#f49ac1"), ("onaccent", "#1c1217"))}
+    html = UPDATER_HTML
+    for k, v in (("FRAME", c["frame"]), ("BORDER", c["border"]), ("TEXT", c["text"]), ("SOFT", c["soft"]),
+                 ("ACCENT", c["accent"]), ("ONACCENT", c["onaccent"])):
+        html = html.replace(f"__{k}__", v)
+    w, h = 340, 130
+    try:
+        x, y = int(args["cx"]) - w // 2, int(args["cy"]) - h // 2
+        pos = {"x": x, "y": y}
+    except (KeyError, ValueError):
+        pos = {}
+
+    class UpApi:
+        def close(self):
+            window.destroy()
+
+    window = webview.create_window(APP_NAME + " updater", html=html, js_api=UpApi(), width=w, height=h, frameless=True,
+                                   resizable=False, easy_drag=False, background_color=c["frame"], **pos)
+
+    def say(msg):
+        try:
+            window.evaluate_js(f"say({json.dumps(msg)})")
+        except Exception:
+            pass
+
+    def fail(msg):
+        try:
+            window.evaluate_js(f"fail({json.dumps(msg)})")
+        except Exception:
+            pass
+
+    def start_app():
+        subprocess.Popen([str(exe)], cwd=str(exe.parent), env=clean_env(), close_fds=True, creationflags=0x00000008 | 0x00000200,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    def work():
+        time.sleep(0.8)  # let the window paint, then tell the app it can close
+        try:
+            k = _kernel32()
+            ev = k.OpenEventW(0x0002, False, UPDATER_EVENT)
+            if ev:
+                k.SetEvent(ev)
+                k.CloseHandle(ev)
+        except Exception:
+            pass
+        say("Closing ANY-PRESENCE…")
+        try:
+            proc = psutil.Process(pid) if pid else None
+            if proc:
+                try:
+                    proc.wait(15)
+                except psutil.TimeoutExpired:
+                    proc.kill()  # it didn't close by itself
+        except psutil.Error:
+            pass
+        say("Installing…")
+        for _ in range(60):  # the file frees up a moment after the app is gone
+            try:
+                os.replace(new, exe)
+                break
+            except OSError:
+                time.sleep(0.5)
+        else:
+            try:
+                start_app()  # still the old version, but at least the app is back
+            except Exception:
+                pass
+            fail("Couldn't replace the app. The old version was opened again, and you can try the update later.")
+            return
+        say("Opening the new version…")
+        try:
+            start_app()
+        except Exception as e:
+            fail(f"The new version couldn't start: {e}")
+            return
+        user32 = ctypes.windll.user32
+        for _ in range(160):  # up to 40 seconds
+            hwnd = user32.FindWindowW(None, APP_NAME)
+            if hwnd and user32.IsWindowVisible(hwnd):
+                time.sleep(0.4)
+                window.destroy()
+                return
+            time.sleep(0.25)
+        fail("The new version didn't open. Open ANY-PRESENCE again from its file.")
+
+    def finish():
+        if getattr(sys, "frozen", False):  # remove this temporary copy once it has closed
+            try:
+                subprocess.Popen(["cmd", "/c", f'ping 127.0.0.1 -n 3 >nul & del "{sys.executable}"'], creationflags=0x08000000,
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=clean_env())
+            except Exception:
+                pass
+
+    webview.start(work)
+    finish()
+
+
+def _kernel32():
+    import ctypes
+
+    k = ctypes.WinDLL("kernel32", use_last_error=True)
+    k.CreateEventW.restype = ctypes.c_void_p
+    k.OpenEventW.restype = ctypes.c_void_p
+    k.SetEvent.argtypes = [ctypes.c_void_p]
+    k.CloseHandle.argtypes = [ctypes.c_void_p]
+    k.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    k.WaitForSingleObject.restype = ctypes.c_uint32
+    return k
+
+
 class SingleInstance:
     """Only one ANY-PRESENCE at a time (Windows). A second launch just asks the running one to show its window."""
     MUTEX = "Local\\ANY-PRESENCE-mutex"
@@ -1511,6 +1654,7 @@ class Api:
         self._cfg = load_config()
         apply_network(self._cfg["network"])
         self._window = None
+        self._updating = False
         self._rpc = None
         self._running = False
         self._starting = False
@@ -1628,8 +1772,8 @@ class Api:
         self._update = {"version": tag.lstrip("vV"), "url": exe_url, "sha": sha, "sha_url": sha_url}
         return {"available": True, "version": self._update["version"], "priority": priority, "why": why, "notes": notes}
 
-    def install_update(self):
-        """Download the new .exe, check its checksum, then let a small script swap it in and restart the app."""
+    def install_update(self, look=None):
+        """Download the new .exe, check its checksum, then hand over to the update window (a separate process)."""
         info = getattr(self, "_update", None)
         if not info:
             return {"error": "Check for updates first."}
@@ -1657,29 +1801,64 @@ class Api:
             if digest.hexdigest() != expected:
                 new.unlink(missing_ok=True)
                 return {"error": "The download didn't match its checksum, so it was discarded."}
-            import subprocess, tempfile
-            bat = Path(tempfile.gettempdir()) / "any_presence_update.bat"
-            esc = lambda path: str(path).replace("%", "%%")  # a % in a folder name must survive the script
-            bat.write_text(  # UTF-8 with the console switched to it, so folders with accents (José, Ñandú...) work
-                "@echo off\r\nchcp 65001 >nul\r\nset n=0\r\n:wait\r\nping 127.0.0.1 -n 2 >nul\r\n"
-                f'move /y "{esc(new)}" "{esc(exe)}" >nul 2>&1\r\n'
-                "if errorlevel 1 (\r\n set /a n+=1\r\n if %n% lss 30 goto wait\r\n exit /b 1\r\n)\r\n"
-                f'ping 127.0.0.1 -n 4 >nul\r\nstart "" "{esc(exe)}"\r\ndel "%~f0"\r\n', encoding="utf-8")
-            self._push("update_progress", {"stage": "restart", "pct": 100})
-            env = clean_env()
-            si = subprocess.STARTUPINFO()
-            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            si.wShowWindow = 0
-            subprocess.Popen(["cmd", "/c", str(bat)], creationflags=0x08000000 | 0x00000200,
-                             close_fds=True, env=env, startupinfo=si,
-                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return self._launch_updater(exe, new, look or {})
         except Exception as e:
             try:
                 new.unlink(missing_ok=True)
             except Exception:
                 pass
             return {"error": f"Update failed: {e}"}
-        threading.Timer(1.5, self._quit_app).start()
+
+    def _launch_updater(self, exe, new, look):
+        """Start the update window in its own process (from a temporary copy of the .exe, so the real one can be replaced),
+        and close this app once that window is showing."""
+        import shutil, subprocess, tempfile
+        tmp = Path(tempfile.gettempdir())
+        for old in tmp.glob("ANY-PRESENCE-updater-*.exe"):
+            try:
+                old.unlink()
+            except OSError:
+                pass
+        copy = tmp / f"ANY-PRESENCE-updater-{os.getpid()}.exe"
+        shutil.copy2(exe, copy)
+        k = _kernel32()
+        ev = k.CreateEventW(None, True, False, UPDATER_EVENT)
+        args = [str(copy), "--updater", f"--exe={exe}", f"--new={new}", f"--pid={os.getpid()}"]
+        try:
+            args += [f"--cx={int(self._window.x + self._window.width / 2)}", f"--cy={int(self._window.y + self._window.height / 2)}"]
+        except Exception:
+            pass
+        for key in ("frame", "border", "text", "soft", "accent", "onaccent"):
+            if isinstance(look, dict) and isinstance(look.get(key), str):
+                args.append(f"--{key}={look[key].strip()}")
+        self._updating = True
+        try:
+            proc = subprocess.Popen(args, cwd=str(tmp), env=clean_env(), close_fds=True, creationflags=0x00000008 | 0x00000200,
+                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception as e:
+            self._updating = False
+            k.CloseHandle(ev)
+            new.unlink(missing_ok=True)
+            return {"error": f"Couldn't open the update window: {e}"}
+        self._push("update_progress", {"stage": "restart", "pct": 100})
+
+        def wait():
+            opened = False
+            for _ in range(120):  # up to 60 seconds
+                if k.WaitForSingleObject(ev, 500) == 0:
+                    opened = True
+                    break
+                if proc.poll() is not None:
+                    break
+            k.CloseHandle(ev)
+            if opened:
+                self._quit_app()  # the update window takes it from here
+                return
+            self._updating = False
+            new.unlink(missing_ok=True)
+            self._push("update_error", "The update window didn't open. Nothing changed, so you can try again.")
+
+        threading.Thread(target=wait, daemon=True).start()
         return {"ok": True}
 
     def _update_check_later(self):
@@ -1692,7 +1871,7 @@ class Api:
     # ---- links
     def open_link(self, url):
         host = urlparse(str(url)).hostname if str(url).startswith("https://") else None
-        if url in ("https://discord.com/developers/applications", "https://api.imgbb.com/") or host in INFO_HOSTS:
+        if url in ("https://discord.com/developers/applications", "https://api.imgbb.com/", "https://ih3l.github.io/ANY-PRESENCE-releases/terms.html") or host in INFO_HOSTS:
             import webbrowser
             webbrowser.open(url)
 
@@ -1702,6 +1881,8 @@ class Api:
             self._window.minimize()
 
     def close(self):
+        if self._updating:  # the update window stays up until the updater has opened
+            return
         if self._cfg["close_action"] == "background" and pystray is not None and self._window:
             self._hide_to_tray()
         else:
@@ -2676,6 +2857,9 @@ def main():
                           "--disable-sync --disable-component-update --disable-features=Translate "
                           "--js-flags=--max-old-space-size=64")
 
+    if UPDATER:
+        run_updater()
+        return
     single = SingleInstance()
     if not single.is_primary:
         return

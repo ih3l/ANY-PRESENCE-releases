@@ -550,6 +550,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
           <details class="acc"><summary><svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.2"/></svg>My Games<svg class="chev" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>Games you started, saved or added with “Add to My Games” (with a program chosen) show up here, with the time you've played. Play launches the game and shows it on Discord. Click a game to change its banner. Click a game's title, here or in the search results, to see its store page info: description, trailers, screenshots, ratings and details. If Discord is closed, the presence starts when it opens. With several games open, closing the one on Discord brings back the previous one.</p></div></details>
           <details class="acc"><summary><svg viewBox="0 0 16 16"><path d="M2.5 8h11M8 2.5v11"/></svg>Background<svg class="chev" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>Set “When the window closes” to Tray to keep ANY-PRESENCE running. Open it again from the tray icon.</p></div></details>
           <details class="acc"><summary><svg viewBox="0 0 16 16"><path d="M8 2l6.5 11.5h-13zM8 6.5v3"/></svg>Problems<svg class="chev" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>No presence in Discord: Discord must be open and Activity Status on in Discord's settings.</p><p>Slow searches or uploads: try Connection → IPv4 in Settings.</p></div></details>
+          <details class="acc"><summary><svg viewBox="0 0 16 16"><path d="M8 2l5 2v4c0 3-2.2 5-5 6-2.8-1-5-3-5-6V4z"/></svg>Terms &amp; Privacy<svg class="chev" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>What the app contacts, what stays on your PC, and the terms of use. <a data-url="https://ih3l.github.io/ANY-PRESENCE-releases/terms.html">Read the Terms &amp; Privacy</a></p></div></details>
           <p id="helpnone" hidden>No results.</p>
         </div>
       </section>
@@ -1396,7 +1397,7 @@ $("#chkupd").onclick=async()=>{
 };
 function upProg(d){
   $("#upprog").hidden=false; const bar=$("#upfill").parentNode;
-  const t={download:"Downloading update…",verify:"Checking download…",restart:"Restarting…"}[d.stage]||"Updating…";
+  const t={download:"Downloading update…",verify:"Checking download…",restart:"Opening the update window…"}[d.stage]||"Updating…";
   $("#upstage").textContent=d.stage==="download"&&d.pct>=0?`${t} ${d.pct}%`:t;
   bar.classList.toggle("busy",d.stage!=="download"||d.pct<0);
   $("#upfill").style.width=(d.pct<0?35:d.pct)+"%";
@@ -1409,7 +1410,8 @@ $("#uplater").onclick=laterUpdate;
 $("#upnow").onclick=async()=>{
   const b=$("#upnow"); b.disabled=true; b.textContent="Updating…"; $("#uperr").hidden=true;
   $("#uplater").disabled=true; upProg({stage:"download",pct:0});
-  const r=await api().install_update();
+  const cs=getComputedStyle(document.documentElement), v=n=>cs.getPropertyValue("--"+n).trim();
+  const r=await api().install_update({frame:v("frame"),border:v("border"),text:v("text"),soft:v("soft"),accent:v("accent"),onaccent:v("on-accent")});
   if(r&&r.error){ $("#upprog").hidden=true; $("#uplater").disabled=false; b.disabled=false; b.textContent="Update now"; const e=$("#uperr"); e.textContent=r.error; e.hidden=false }
 };
 
@@ -1435,6 +1437,7 @@ window.onBackend=(ev,data)=>{
   else if(ev==="auto_started"){S.running=true;S.startedAt=data.started_at;showActive(data);status(`${data.title} detected. Presence active`,"live")}
   else if(ev==="resumed"){S.running=true;S.startedAt=data.started_at;showActive(data);status(`Back to ${data.title}`,"live")}
   else if(ev==="update_progress"){upProg(data)}
+  else if(ev==="update_error"){ $("#upprog").hidden=true; $("#uplater").disabled=false; const b=$("#upnow"); b.disabled=false; b.textContent="Update now"; const e=$("#uperr"); e.textContent=data; e.hidden=false }
   else if(ev==="banner_options"){ if($("#bnmodal").classList.contains("on") && bnGame && data.key===bnGame.key){ data.options.forEach(addBanner); if(data.done) bnFinish() } }
   else if(ev==="pending_started"){S.running=true;S.startedAt=data.started_at;showActive(data);status(`Discord opened. ${data.title}: presence active`,"live")}
   else if(ev==="banner_ready"){setBanner(data.url,data.data)}
