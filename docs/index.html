@@ -182,10 +182,10 @@ h1 em{font-style:normal;color:var(--accent-on)}
 
 /* themes */
 .bands{display:flex;gap:10px;height:210px;margin-top:34px}
-.band{flex:1;min-width:0;border-radius:14px;background:var(--bg);color:var(--text);border:1px solid var(--border-hi);padding:16px;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;text-align:left;overflow:hidden;transition:flex .3s,border-color .15s}
-.band:hover{border-color:var(--accent)}
-.band.on{flex:3;border:2px solid var(--accent);padding:15px}
-.band b{font-size:18px;font-weight:700}
+.tband{flex:1;min-width:0;border-radius:14px;background:var(--bg);color:var(--text);border:1px solid var(--border-hi);padding:16px;display:flex;flex-direction:column;justify-content:space-between;align-items:flex-start;text-align:left;overflow:hidden;transition:flex .3s,border-color .15s}
+.tband:hover{border-color:var(--accent)}
+.tband.on{flex:3;border:2px solid var(--accent);padding:15px}
+.tband b{font-size:18px;font-weight:700}
 .sw{display:flex;height:26px;width:84px;border-radius:7px;overflow:hidden;border:1px solid var(--border-hi)}.sw i{flex:1}.sw i:last-child{flex:.6}
 .note{margin-top:16px;color:var(--muted);font-size:14px}
 
@@ -227,7 +227,7 @@ footer p{max-width:60ch;line-height:1.5}
   .dots{display:none}
   section{padding:60px 0}
   .steps{grid-template-columns:1fr}
-  .bands{flex-direction:column;height:auto}.band,.band.on{flex:none;height:64px;flex-direction:row;align-items:center}
+  .bands{flex-direction:column;height:auto}.tband,.tband.on{flex:none;height:64px;flex-direction:row;align-items:center}
   .btn{height:46px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}.reveal{opacity:1;transform:none}}
@@ -351,12 +351,12 @@ let theme="rose";
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
 function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove("on"),1600)}
 function setTheme(id,save=true){ if(!THEMES.some(t=>t.id===id)) id="rose"; theme=id; document.documentElement.dataset.theme=id;
-  $$(".dot").forEach(d=>d.classList.toggle("on",d.dataset.id===id)); $$(".band").forEach(d=>d.classList.toggle("on",d.dataset.id===id)); try{ $("#appf").contentWindow.postMessage({type:"theme",id},"*") }catch(e){}
+  $$(".dot").forEach(d=>d.classList.toggle("on",d.dataset.id===id)); $$(".tband").forEach(d=>d.classList.toggle("on",d.dataset.id===id)); try{ $("#appf").contentWindow.postMessage({type:"theme",id},"*") }catch(e){}
   if(save){ try{ localStorage.setItem("ap-theme",id) }catch(e){} } }
 // theme dots + cards
 THEMES.forEach(t=>{
   const d=document.createElement("button"); d.className="dot"; d.dataset.id=t.id; d.title=t.name; d.setAttribute("aria-label",t.name+" theme"); d.style.background=`linear-gradient(135deg,${t.c[0]} 50%,${t.c[2]} 50%)`; d.onclick=()=>setTheme(t.id); $("#dots").append(d);
-  const c=document.createElement("button"); c.className="band"; c.dataset.id=t.id; c.dataset.theme=t.id; c.setAttribute("aria-label",t.name+" theme");
+  const c=document.createElement("button"); c.className="tband"; c.dataset.id=t.id; c.dataset.theme=t.id; c.setAttribute("aria-label",t.name+" theme");
   c.innerHTML=`<b>${t.name}</b><span class="sw">${t.c.map(h=>`<i style="background:${h}"></i>`).join("")}</span>`;
   c.onclick=()=>setTheme(t.id); $("#themegrid").append(c); });
 // rail follows the section on screen
