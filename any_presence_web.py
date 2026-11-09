@@ -1,4 +1,5 @@
 import base64
+from collections import deque
 import hashlib
 import html as htmllib
 import inspect
@@ -18,6 +19,7 @@ import psutil
 import requests
 from PIL import Image, ImageChops, ImageDraw, ImageOps, ImageStat
 from pypresence import Presence
+from pypresence.types import ActivityType, StatusDisplayType
 
 try:
     from icoextract import IconExtractor  # reads the icon out of an .exe
@@ -48,7 +50,7 @@ def apply_network(mode):
 
 APP_NAME = "ANY-PRESENCE"
 WINDOW_SIZE = (860, 580)  # the window has one fixed size
-APP_VERSION = "1.2.4" # app version @_@
+APP_VERSION = "1.3.0" # app version @_@
 DEFAULT_APP_ID = "1557320467474292756"  # used unless the person adds their own in Settings
 UPDATE_REPO = "ih3l/ANY-PRESENCE-releases"  # public repo used to check for the updates
 UPDATE_ASSET = "ANY-PRESENCE.exe"
@@ -110,6 +112,9 @@ def default_config():
         "recent": [],  # games the presence was started for (newest first)
         "playtime": {},  # program name -> seconds played. Kept even if the game leaves Recent
         "apps": [],  # saved apps (see save_current_app)
+        "ext_on": False,  # lets the browser extension talk to the app (a local server)
+        "ext": None,  # the extension's settings (see clean_ext)
+        "lyric_pick": {},  # song -> the id of the LRCLIB lyrics chosen for it in the extension (-1: none)
         "sources": {},  # filled in below once SOURCES exists
     }
 
@@ -174,7 +179,13 @@ def load_config():
         for key, value in data.get("sources", {}).items():
             if key in cfg["sources"]:
                 cfg["sources"][key] = bool(value)
+        cfg["ext_on"] = bool(data.get("ext_on"))
+        cfg["ext"] = data.get("ext")
+        if isinstance(data.get("lyric_pick"), dict):
+            cfg["lyric_pick"] = {k[:300]: v for k, v in list(data["lyric_pick"].items())[-500:]
+                                 if isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool)}
         break
+    cfg["ext"] = clean_ext(cfg.get("ext"))
     return cfg
 
 
@@ -248,6 +259,11 @@ def clip_text(text, limit=128):
     """Discord rejects texts longer than 128 characters (window titles can be long)."""
     text = " ".join((text or "").split())
     return text if len(text) <= limit else text[:limit - 1].rstrip() + "\u2026"
+
+
+def pad2(text):
+    """Discord rejects a details/state line shorter than 2 characters: add an invisible one."""
+    return text + "\u200b" if text and len(text) < 2 else text
 
 
 STOPWORDS = {"the", "of", "a", "an", "and", "or", "to", "in", "on", "for"}
@@ -1308,7 +1324,7 @@ IMGBB_API = "https://api.imgbb.com/1/upload"
 NEED_KEY = "Your own images need an ImgBB API key. Add it in Settings."
 CENTER = {"x": 0.5, "y": 0.5, "zoom": 1.0, "rot": 0}
 # sites Discord loads reliably on its own; anything else is re-hosted when an ImgBB key is set
-SAFE_HOSTS = ("steamstatic.com", "gog-statics.com", "vndb.org", "wikimedia.org", "dlsite.jp",
+SAFE_HOSTS = ("sndcdn.com", "steamstatic.com", "gog-statics.com", "vndb.org", "wikimedia.org", "dlsite.jp",
               "archive.org", "lutris.net", "ibb.co", "wsrv.nl", "catbox.moe")
 
 
@@ -1647,6 +1663,878 @@ class SingleInstance:
         threading.Thread(target=loop, daemon=True).start()
 
 
+# ---------------------------------------------------------------- browser extension (music and video from websites)
+EXT_PORTS = range(47615, 47626)  # the extension looks for the app on these local ports
+EXT_GENERIC_APP_ID = "1568750532292513945"  # "ANY-PRESENCE Web", for sites without their own application
+EXT_SITES = {  # one Discord application per site: its name is what Discord shows after "Listening to"
+    "soundcloud": {"name": "SoundCloud", "app_id": "1568750628241416274", "kind": "listening", "hosts": ("soundcloud.com",),
+                   "images": ("sndcdn.com",), "button": "Listen on SoundCloud"},
+    # Dedicated Spotify application ID supplied for Spotify Web Rich Presence.
+    "spotify": {"name": "Spotify", "app_id": "1569051949674795209", "kind": "listening", "hosts": ("spotify.com",),
+                "images": ("scdn.co", "spotifycdn.com"), "button": "Listen on Spotify"},
+}
+EXT_SITE_DEFAULTS = {"on": True, "icon": "song", "status": "title", "nolyrics": "notes", "kind": "listening", "button": True, "clean": False, "icon_url": ""}
+EXT_GLOBAL_DEFAULTS = {"enabled": True, "with_game": True, "pause_hidden": False, "private": False}
+EXT_ORIGINS = (
+    "chrome-extension://idilmdckbbbpfnjogenimldcjgfciemn",  # the copy loaded from a folder: its ID is fixed by the "key" in its manifest
+    "chrome-extension://gfoikkdnehlllimnmmjbpbigngoamnlp",  # the Chrome Web Store copy
+)
+
+
+def ext_defaults():
+    return {**EXT_GLOBAL_DEFAULTS, "sites": {k: dict(EXT_SITE_DEFAULTS, kind=v["kind"]) for k, v in EXT_SITES.items()}}
+
+
+def clean_ext(raw):
+    """The extension settings from the config file, with anything unexpected dropped."""
+    out = ext_defaults()
+    if not isinstance(raw, dict):
+        return out
+    for k in EXT_GLOBAL_DEFAULTS:
+        if isinstance(raw.get(k), bool):
+            out[k] = raw[k]
+    for sid, cur in out["sites"].items():
+        got = (raw.get("sites") or {}).get(sid) if isinstance(raw.get("sites"), dict) else None
+        if isinstance(got, dict):
+            clean_ext_site(cur, got)
+    return out
+
+
+def clean_ext_site(cur, patch):
+    """Apply the allowed fields of a site's settings change to `cur`."""
+    if (patch.get("lyrics") is True and "status" not in patch) or cur.get("lyrics") is True:  # the old Lyrics switch is now a choice of Status shows
+        cur["status"] = "lyrics"
+    cur.pop("lyrics", None)
+    for k in ("on", "button", "clean"):
+        if isinstance(patch.get(k), bool):
+            cur[k] = patch[k]
+    for k, allowed in (("icon", ("song", "playlist", "custom")), ("status", ("title", "artist", "lyrics", "name")), ("nolyrics", ("notes", "title", "name")),
+                       ("kind", ("listening", "watching"))):
+        if patch.get(k) in allowed:
+            cur[k] = patch[k]
+    if isinstance(patch.get("icon_url"), str) and (patch["icon_url"] == "" or patch["icon_url"].startswith("https://")):
+        cur["icon_url"] = patch["icon_url"][:512]
+
+
+def host_matches(url, hosts):
+    try:
+        u = urlparse(str(url))
+        h = (u.hostname or "").lower()
+    except ValueError:
+        return False
+    return u.scheme == "https" and any(h == x or h.endswith("." + x) for x in hosts)
+
+
+LRCLIB = "https://lrclib.net/api"
+LYRICS_NOISE = re.compile(
+    r"[\(\[][^)\]]*\b(official|audio|video|lyrics?|lyric video|visuali[sz]er|prod\.?|free( download)?|download|hd|4k|"
+    r"music video|out now|premiere)\b[^)\]]*[\)\]]", re.I)
+
+
+def lrc_lines(text):
+    """Timed lyrics in the .lrc format ("[01:23.45] words") as a sorted list of (seconds, words)."""
+    out = []
+    for raw in str(text or "").splitlines():
+        stamps = re.findall(r"\[(\d+):(\d+(?:\.\d+)?)\]", raw)
+        words = re.sub(r"\[[^\]]*\]", "", raw).strip()
+        words = re.sub(r"<\d+:\d+(?:\.\d+)?>", "", words).strip()  # per-word stamps in the enhanced format
+        for m, s in stamps:
+            out.append((int(m) * 60 + float(s), words))
+    return sorted(out, key=lambda x: x[0])
+
+
+def lyric_chunks(lines, limit=128, min_span=6.0, sep=" / "):
+    """Join consecutive lines so each piece fits in one Discord line and stays up for at least `min_span` seconds
+    (Discord limits how often a presence can change). Returns a list of (start seconds, text), text "" for a break."""
+    chunks, i, n = [], 0, len(lines)
+    while i < n:
+        start, text = lines[i]
+        if not text:
+            chunks.append((start, ""))
+            i += 1
+            continue
+        cur, j = clip_text(text, limit), i
+        while j + 1 < n and lines[j + 1][1] and lines[j + 1][0] - start < min_span:
+            joined = cur + sep + lines[j + 1][1]
+            if len(joined) > limit:
+                break
+            cur, j = joined, j + 1
+        chunks.append((start, cur))
+        i = j + 1
+    return chunks
+
+
+def lyric_at(chunks, seconds):
+    """The text that belongs at this point of the song, or None before the first line and in breaks."""
+    import bisect
+    if not chunks:
+        return None
+    k = bisect.bisect_right([c[0] for c in chunks], seconds) - 1
+    return (chunks[k][1] or None) if k >= 0 else None
+
+
+def clean_track(title, uploader):
+    """A tidier title and artist for the presence: "Artist - Song (Official Audio)" by some uploader becomes the song
+    "Song" by "Artist". Only used when the user turns it on, because titles are written in many different ways."""
+    t = " ".join(LYRICS_NOISE.sub("", title or "").split()).strip(" -\u2013\u2014")
+    artist = uploader
+    m = re.match(r"^(.+?)\s+[-\u2013\u2014]\s+(.+)$", t)
+    if m and m.group(1).strip() and m.group(2).strip():
+        artist, t = m.group(1).strip(), m.group(2).strip()
+    return (t or title), (artist or uploader)
+
+
+def lyric_queries(title, artist):
+    """SoundCloud titles are messy ("Artist - Song (Official Audio)") and the uploader isn't always the artist."""
+    t = " ".join(LYRICS_NOISE.sub("", title or "").split())
+    out = []
+    if " - " in t:
+        a, b = (x.strip() for x in t.split(" - ", 1))
+        if a and b:
+            out.append((a, b))
+    if t and artist:
+        out.append((artist, t))
+    if t:
+        out.append(("", t))
+    base = out[0][1] if out else t
+    bare = " ".join(re.sub(r"[\(\[][^\)\]]*[\)\]]", " ", base).split())  # "(all plats) song" -> "song"
+    short = " ".join(re.split(r"\s+(?:w/|with|feat\.?|ft\.?|featuring|x|vs\.?|&)\s+|\s*[\(\[,]", bare, 1, flags=re.I)[0].split())
+    for v in (bare, short):  # the same song without the extras: the database rarely has them
+        if v and v != t:
+            out.append((artist or "", v))
+            out.append(("", v))
+    seen, uniq = set(), []
+    for q in out:
+        if q not in seen:
+            seen.add(q)
+            uniq.append(q)
+    return uniq[:6]
+
+
+def _words(text):
+    """Lowercase words without accents, punctuation or filler, for comparing names loosely."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(text or "").lower())
+    t = "".join(c for c in t if not unicodedata.combining(c)).replace("'", "").replace("\u2019", "")
+    skip = {"the", "a", "an", "and", "feat", "ft", "featuring", "with", "x", "vs", "remix", "version", "official", "audio"}
+    return {w for w in re.findall(r"[^\W_]+", t) if w not in skip and (len(w) > 1 or not w.isascii())}
+
+
+def lyric_match(found, title, artist, duration):
+    """How well a LRCLIB result fits the song, or None when it doesn't. Loose on purpose: some artist in common and some
+    of the title in common is enough; the length of the song only helps to choose between several."""
+    raw = lambda s: str(s or "").replace("\ufe0f", "").replace("\u200d", "").strip().casefold()
+    if not _words(title) and raw(title):  # a title with no letters at all (only emojis or symbols): it has to be the same text
+        if raw(found.get("trackName")) != raw(title):
+            return None
+        artist_hit = bool(_words(found.get("artistName")) & _words(artist))
+        diff = abs((found.get("duration") or 0) - duration) if duration else None
+        return 2 + (1 if artist_hit else 0) - (min(diff, 60) / 30 if diff is not None else 0)
+    mine_title = _words(title)
+    for _, q in lyric_queries(title, artist):
+        mine_title |= _words(q)
+    mine_all = mine_title | _words(artist)
+    their_title, their_artist = _words(found.get("trackName")), _words(found.get("artistName"))
+    if not their_title:
+        return None
+
+    def common(a, b):  # words of a that are in b, also as part of a longer word ("skeleton" in "wifiskeleton")
+        return sum(1 for w in a if w in b or any(len(w) >= 4 and (w in x or x in w) and len(x) >= 4 for x in b))
+
+    # how much of one title is in the other; the artist counts too, as it is often written inside the title: "Song (Artist)"
+    title_hit = max(common(their_title, mine_all) / len(their_title), common(mine_title, their_title) / len(mine_title) if mine_title else 0)
+    artist_hit = common(their_artist, mine_all) > 0
+    diff = abs((found.get("duration") or 0) - duration) if duration else None
+    # the artist has to be (at least 70%) the same too: the same title by someone else is another song. It can be the
+    # uploader's name, or written in the title ("Artist - Song", "Song (Artist)"), and either side may list more names.
+    mine_artist = _words(artist)
+    for a, _ in lyric_queries(title, artist):
+        mine_artist |= _words(a)
+    if mine_artist and their_artist:
+        similar = max(common(their_artist, mine_all) / len(their_artist),
+                      common(mine_artist, their_artist | their_title) / len(mine_artist))
+        if similar < 0.7:
+            return None
+    if not (title_hit >= 0.8 or (artist_hit and common(their_title, mine_title))):
+        return None
+    return title_hit * 2 + (1 if artist_hit else 0) - (min(diff, 60) / 30 if diff is not None else 0)
+
+
+def _lrclib_search(params):
+    try:
+        r = requests.get(f"{LRCLIB}/search", params=params, headers=HEADERS, timeout=6)
+        res = r.json() if r.ok else []
+        return res if isinstance(res, list) else []
+    except Exception:
+        return []
+
+
+def _lyric_entry(x, matched):
+    lines = [w for _, w in lrc_lines(x["syncedLyrics"])][:2]
+    return {"id": x.get("id"), "title": str(x.get("trackName") or "")[:80], "artist": str(x.get("artistName") or "")[:60],
+            "duration": x.get("duration") or 0, "synced": x["syncedLyrics"], "matched": matched, "preview": " / ".join(lines)[:90]}
+
+
+def lyric_search(text):
+    """What the user searched for by hand: LRCLIB results with timed lyrics, none of them chosen automatically."""
+    text = " ".join(str(text or "").split())[:100]
+    out, seen = [], set()
+    if text:
+        for x in _lrclib_search({"q": text}):
+            if isinstance(x, dict) and isinstance(x.get("id"), int) and x.get("syncedLyrics") and x["id"] not in seen:
+                seen.add(x["id"])
+                out.append(_lyric_entry(x, False))
+    return out[:10]
+
+
+def lyric_by_id(i):
+    """One LRCLIB entry, for lyrics that were chosen by hand earlier and aren't among the automatic results."""
+    try:
+        r = requests.get(f"{LRCLIB}/get/{int(i)}", headers=HEADERS, timeout=6)
+        x = r.json() if r.ok else None
+    except Exception:
+        return None
+    return _lyric_entry(x, False) if isinstance(x, dict) and x.get("syncedLyrics") else None
+
+
+def lyric_options(title, artist, duration):
+    """Every LRCLIB result with timed lyrics that was found for a song: the ones that fit it first (best first), then the
+    rest, closest in length first. Each is a dict with its id, names, length, the lyrics text and a short preview."""
+    found, seen = [], set()
+    # no symbols: "AK4:20" -> "AK4 20", but "Don't" stays (a text with no letters at all is kept as it is)
+    plain = lambda s: " ".join(re.findall(r"[^\W_]+(?:['\u2019][^\W_]+)*", s or "")) or (s or "").strip()
+    tries = []
+    for raw_art, raw_name in lyric_queries(title, artist):
+        art, name = plain(raw_art), plain(raw_name)
+        tries += [{"q": f"{art} {name}".strip()}, {"q": name}]
+        if art and name:  # the exact fields, which also find a song when the artist is written a bit differently
+            tries.append({"track_name": name, "artist_name": art})
+            tries.append({"track_name": name})
+        # and the words exactly as they are written, in case the cleaned ones don't find it
+        tries += [{"q": f"{raw_art} {raw_name}".strip()}, {"track_name": raw_name, "artist_name": raw_art}]
+    tries = [dict(t) for t in {tuple(sorted(t.items())): t for t in tries}.values() if all(t.values())]
+
+    # the most likely searches go out together, so the wait is the slowest one and not the sum; the rest only if needed
+    for stage in (tries[:3], tries[3:]):
+        if not stage:
+            continue
+        with ThreadPoolExecutor(max_workers=len(stage)) as pool:
+            batches = list(pool.map(_lrclib_search, stage))
+        for results in batches:
+            for x in results:
+                if not isinstance(x, dict) or x.get("id") in seen or not x.get("syncedLyrics"):
+                    continue
+                seen.add(x.get("id"))
+                score = lyric_match(x, title, artist, duration)
+                diff = abs((x.get("duration") or 0) - duration) if duration else 0
+                e = _lyric_entry(x, score is not None)
+                e["_rank"] = (score is None, -(score or 0), diff)
+                found.append(e)
+        if any(o["matched"] and o["_rank"][1] <= -2.5 for o in found):
+            break  # a good match: no need to try more words
+    found.sort(key=lambda o: o["_rank"])
+    for o in found:
+        del o["_rank"]
+    return found[:12]
+
+
+def fetch_lyrics(title, artist, duration):
+    """The chunks of the best matching lyrics of a song. [] when there are none."""
+    for o in lyric_options(title, artist, duration):
+        if o["matched"]:
+            return lyric_chunks(lrc_lines(o["synced"]))
+    return []
+
+
+class Lyrics:
+    """Looks lyrics up in the background and remembers them, so a song is only searched once."""
+
+    def __init__(self, fetch=lyric_options):
+        self._fetch = fetch
+        self._cache = {}  # key -> options (the results with timed lyrics; [] when none were found)
+        self._chunks = {}  # (key, id) -> chunks
+        self._busy = set()
+        self._asking = set()  # (key, id) being fetched
+        self._missing = set()  # (key, id) that could not be fetched
+        self._lock = threading.Lock()
+
+    def add(self, key, extra):
+        """Put results found by hand first in a song's options."""
+        with self._lock:
+            have = self._cache.get(key)
+            if have is None:
+                return
+            ids = {o["id"] for o in extra}
+            self._cache[key] = (extra + [o for o in have if o["id"] not in ids])[:24]
+
+    def ensure(self, key, pick):
+        """True while lyrics chosen earlier (by id) are still being fetched, because they aren't among the results."""
+        if not isinstance(pick, int) or pick <= 0:
+            return False
+        with self._lock:
+            have = self._cache.get(key)
+            if have is None or any(o["id"] == pick for o in have) or (key, pick) in self._missing:
+                return False
+            if (key, pick) in self._asking:
+                return True
+            self._asking.add((key, pick))
+        threading.Thread(target=self._run_id, args=(key, pick), daemon=True).start()
+        return True
+
+    def _run_id(self, key, pick):
+        e = lyric_by_id(pick)
+        with self._lock:
+            if e and key in self._cache:
+                self._cache[key] = [e] + self._cache[key]
+            else:
+                self._missing.add((key, pick))
+            self._asking.discard((key, pick))
+
+    def options(self, key, title, artist, duration):
+        """The options if known; None while they are still being looked for (which starts it)."""
+        with self._lock:
+            if key in self._cache:
+                return self._cache[key]
+            if key in self._busy or len(self._busy) >= 2:
+                return None
+            self._busy.add(key)
+        threading.Thread(target=self._run, args=(key, title, artist, duration), daemon=True).start()
+        return None
+
+    def get(self, key, title, artist, duration, pick=None):
+        """The chunks of the chosen lyrics (the best match when none is chosen; pick -1 means no lyrics); None while looking."""
+        opts = self.options(key, title, artist, duration)
+        if opts is None or pick == -1:
+            return None if opts is None else []
+        if self.ensure(key, pick):
+            return None  # the lyrics chosen for this song are being fetched: not the automatic ones meanwhile
+        chosen = next((o for o in opts if o["id"] == pick), None) or next((o for o in opts if o["matched"]), None)
+        if not chosen:
+            return []
+        with self._lock:
+            ck = (key, chosen["id"])
+            if ck not in self._chunks:
+                if len(self._chunks) > 60:
+                    self._chunks.pop(next(iter(self._chunks)))
+                self._chunks[ck] = lyric_chunks(lrc_lines(chosen["synced"]))
+            return self._chunks[ck]
+
+    def _run(self, key, title, artist, duration):
+        try:
+            opts = self._fetch(title, artist, duration)
+        except Exception:
+            opts = []
+        with self._lock:
+            if len(self._cache) > 60:
+                self._cache.pop(next(iter(self._cache)))
+            self._cache[key] = opts
+            self._busy.discard(key)
+
+
+class MusicPresence:
+    """The presence made from what the browser extension reports. It has its own Discord connection (one per site
+    application), so it can run next to a game's presence."""
+
+    TRACK_DEBOUNCE = 1.0  # wait for rapid skips to settle before showing a newly detected track
+    MIN_GAP = 1.0  # small spacing between RPC updates; the rolling budget below enforces Discord's actual limit
+    RATE_WINDOW = 20.0
+    RATE_MAX = 5  # Discord clients may update game status 5 times per 20 seconds
+    RATE_GUARD = 0.25  # small margin for scheduling/IPC timing at the edge of the window
+    TICK_INTERVAL = 0.2
+    STALE = 75  # the extension reports every few seconds; silence for this long means the page or browser is gone
+    PAUSE_CLEAR = 300
+    LEAD = 1.0  # seconds: Discord shows an update a moment late, so lyrics are sent a little early
+
+    def __init__(self, api):
+        self.api = api
+        self._lock = threading.RLock()
+        self._rpc, self._rpc_id = None, None
+        self._want = None  # committed activity: (key, kwargs, site, kind)
+        self._pending = None  # candidate waiting for the track debounce to settle
+        self._pending_since = 0.0  # monotonic time
+        self._sent = None  # what Discord is showing now: the same tuple as _want
+        self._sent_at = 0.0  # monotonic time of the last successful SET_ACTIVITY
+        self._update_times = deque()  # successful SET_ACTIVITY times, shared across this class's site app IDs
+        self._seen = 0.0
+        self._paused_since = None
+        self._backoff = 0.0
+        self._last_err = ""
+        self._start_ts = None
+        self._track = None  # what lyrics need: the committed song and where it started playing
+        self.lyrics = Lyrics()
+        self._stop = threading.Event()
+        threading.Thread(target=self._loop, daemon=True).start()
+
+    # -- what the extension reports
+    def report(self, data):
+        site = EXT_SITES.get(data.get("site"))
+        if not site:
+            return
+        cfg = self.api._cfg["ext"]
+        sc = cfg["sites"][data["site"]]
+        now = time.time()
+        mono = time.monotonic()
+        with self._lock:
+            self._seen = now
+            if not cfg["enabled"] or not sc["on"] or not data.get("title") or (self.api._running and not cfg["with_game"]):
+                self._want = None
+                self._pending = None
+                self._pending_since = 0.0
+                self._track = None
+                self._start_ts = None
+                self._paused_since = None
+                return
+
+            playing = bool(data.get("playing"))
+            title, artist = str(data["title"]), str(data.get("artist") or "")
+            if sc.get("clean"):
+                title, artist = clean_track(title, artist)
+            title, artist = clip_text(title), clip_text(artist) or None
+            hires = lambda u: re.sub(r"(/image/ab67616d0000)[0-9a-f]{4}", r"\g<1>b273", re.sub(r"(/image/ab6765630000)[0-9a-f]{4}", r"\g<1>ba8a", u)) if isinstance(u, str) else u  # Spotify's 640 px cover
+            song_img = hires(data.get("image")) if host_matches(data.get("image"), site["images"]) else None
+            list_img = data.get("playlist_image") if host_matches(data.get("playlist_image"), site["images"]) else None
+            icon = {"song": song_img, "playlist": list_img or song_img, "custom": sc.get("icon_url") or song_img}[sc["icon"]]
+            pos, dur = data.get("position"), data.get("duration")
+            pos = float(pos) if isinstance(pos, (int, float)) and 0 <= pos < 86400 else None
+            dur = float(dur) if isinstance(dur, (int, float)) and 0 < dur < 86400 else None
+            # with lyrics on, the line shows notes whenever there is no lyric to show (none found, an intro, a break);
+            # the artist is on the line that appears when the cover is hovered
+            state = "\u266a\u266a\u266a" if sc["status"] == "lyrics" else pad2(artist)
+            kw = {"details": pad2(title), "state": state if playing else "Paused", "large_image": icon or None,
+                  "large_text": f"{artist} \U0001F399" if artist and sc["status"] != "artist" else None,  # not twice
+                  "status_display_type": {"name": StatusDisplayType.NAME, "artist": StatusDisplayType.STATE, "lyrics": StatusDisplayType.STATE, "title": StatusDisplayType.DETAILS}[sc["status"]]}
+            if sc["status"] == "artist" and not artist:
+                kw["status_display_type"] = StatusDisplayType.DETAILS
+            if sc["status"] == "lyrics":  # what the status shows while there is no lyric: the notes, the title or the name
+                kw["status_display_type"] = {"notes": StatusDisplayType.STATE, "title": StatusDisplayType.DETAILS, "name": StatusDisplayType.NAME}[sc["nolyrics"]]
+            url = data.get("url")
+            if sc["button"] and host_matches(url, site["hosts"]) and len(str(url)) <= 512:
+                kw["buttons"] = [{"label": site["button"], "url": str(url)}]
+            start = None
+            if playing and pos is not None:
+                start = int(now - pos)
+                kw["start"] = int((now - pos) * 1000)
+                if dur:
+                    kw["end"] = int((now - pos + dur) * 1000)
+
+            key = (data["site"], title, artist, playing, icon, sc["status"], sc["nolyrics"], sc["kind"], bool(kw.get("buttons")), bool(dur))
+            track = {"on": sc["status"] == "lyrics" and playing, "mode": sc["status"] == "lyrics", "site": data["site"],
+                     "title": str(data["title"]), "artist": str(data.get("artist") or ""),
+                     "song": f"{data['site']}|{str(data['title']).lower()}|{str(data.get('artist') or '').lower()}"[:300],
+                     "dur": dur, "start": (now - pos) if (playing and pos is not None) else None, "artist_line": artist}
+
+            # The same song as the committed one is not a skip: a late cover, a pause or a seek is applied at once, and
+            # any uncommitted skip is cancelled. (The wait is only there to ignore songs that are skipped quickly.)
+            if self._want and self._want[0][:3] == key[:3]:
+                self._pending = None
+                self._pending_since = 0.0
+                if self._want[0] == key and playing and start is not None and self._start_ts is not None and abs(start - self._start_ts) <= 3:
+                    return  # normal heartbeat: still playing as expected
+                self._start_ts = start if playing else None
+                self._track = track
+                self._want = (key, kw, data["site"], sc["kind"])
+                if not playing:
+                    self._paused_since = self._paused_since or now
+                else:
+                    self._paused_since = None
+                return
+
+            candidate = (key, kw, data["site"], sc["kind"], track, start, playing)
+            if self._pending and self._pending[0][:3] == key[:3]:
+                # The same new song: keep the first-seen time (a cover that loads a moment later must not restart the
+                # wait), but use the latest details.
+                self._pending = candidate
+            else:
+                self._pending = candidate
+                self._pending_since = mono
+
+            # Start LRCLIB in parallel with the one-second debounce. When the lookup is quick enough,
+            # the very first Discord update already contains the current lyric line.
+            if track["on"]:
+                lyric_key = (track["title"], track["artist"], round(track["dur"] or 0))
+                self.lyrics.options(lyric_key, track["title"], track["artist"], track["dur"])
+
+    def clear(self):
+        with self._lock:
+            self._want = None
+            self._pending = None
+            self._pending_since = 0.0
+            self._track = None
+            self._start_ts = None
+            self._paused_since = None
+            self._seen = 0.0
+
+    def clear_site(self, site):
+        """Take down what is shown for one site (it was switched off: the extension stops reporting it)."""
+        with self._lock:
+            if (self._want and self._want[2] == site) or (self._pending and self._pending[2] == site):
+                self.clear()
+
+    def shutdown(self):
+        self._stop.set()
+        with self._lock:
+            self._want = None
+            self._pending = None
+            self._pending_since = 0.0
+            self._drop()
+
+    def showing(self):
+        return self._sent is not None
+
+    def lyric_view(self, data):
+        """The lyrics found for the song that is playing, for the extension to choose from. A choice sent in `pick`
+        (an id, or -1 for no lyrics, or None to go back to the automatic one) is remembered for that song."""
+        with self._lock:
+            t = self._pending[4] if self._pending else self._track  # a song still waiting to be shown counts already
+        if not t:
+            return {"song": None, "options": [], "loading": True}  # nothing is playing yet: ask again in a moment
+        if not t["mode"]:
+            return {"song": None, "options": [], "loading": False}
+        key = (t["title"], t["artist"], round(t["dur"] or 0))
+        opts = self.lyrics.options(key, t["title"], t["artist"], t["dur"])
+        if opts is None:
+            return {"song": t["title"], "options": [], "loading": True}
+        picks = self.api._cfg.setdefault("lyric_pick", {})
+        if isinstance(data.get("search"), str):  # looked up by hand: the results are added to the options
+            self.lyrics.add(key, lyric_search(data["search"]))
+            opts = self.lyrics.options(key, t["title"], t["artist"], t["dur"]) or opts
+        if self.lyrics.ensure(key, picks.get(t["song"])):
+            return {"song": t["title"], "options": [], "loading": True}
+        opts = self.lyrics.options(key, t["title"], t["artist"], t["dur"]) or opts
+        if "pick" in data:
+            pick = data["pick"]
+            if pick is None:
+                picks.pop(t["song"], None)
+            elif pick == -1 or any(o["id"] == pick for o in opts):
+                picks.pop(t["song"], None)
+                picks[t["song"]] = pick
+                while len(picks) > 500:
+                    picks.pop(next(iter(picks)))
+            save_config(self.api._cfg)
+        pick = picks.get(t["song"])
+        using = -1 if pick == -1 else (pick if any(o["id"] == pick for o in opts) else next((o["id"] for o in opts if o["matched"]), -1))
+        return {"song": t["title"], "loading": False, "using": using, "chosen": pick is not None, "options": [
+            {k: o[k] for k in ("id", "title", "artist", "duration", "matched", "preview")} for o in opts]}
+
+    # -- sending
+    def _drop(self, clear=True):
+        rpc, self._rpc, self._rpc_id = self._rpc, None, None
+        self._sent = None
+        if rpc:
+            if clear:
+                try:
+                    # Clearing is also an activity change, so include it in the same conservative budget.
+                    rpc.clear()
+                    cleared_at = time.monotonic()
+                    self._sent_at = cleared_at
+                    self._update_times.append(cleared_at)
+                except Exception:
+                    pass
+            try:
+                rpc.close()
+            except Exception:
+                pass
+
+    def note_external_update(self):
+        """Include another ANY-PRESENCE RPC connection's update in this music scheduler's budget."""
+        with self._lock:
+            sent_at = time.monotonic()
+            self._sent_at = sent_at
+            self._update_times.append(sent_at)
+
+    def _loop(self):
+        while not self._stop.wait(self.TICK_INTERVAL):
+            try:
+                self._tick()
+            except Exception:
+                pass
+
+    def _tick(self):
+        now = time.time()
+        mono = time.monotonic()
+        with self._lock:
+            self._tick_locked(now, mono)
+
+    def _with_lyrics(self, want, now):
+        """The wanted presence, with the line of lyrics that is being sung now in place of the artist."""
+        t = self._track
+        if not want or not t or not t["on"] or t["start"] is None:
+            return want
+        key = (t["title"], t["artist"], round(t["dur"] or 0))
+        pick = (self.api._cfg.get("lyric_pick") or {}).get(t["song"])
+        chunks = self.lyrics.get(key, t["title"], t["artist"], t["dur"], pick)
+        text = lyric_at(chunks, now - t["start"] + self.LEAD) if chunks else None
+        if not text:
+            return want
+        k, kw, site, kind = want
+        return (k, {**kw, "state": pad2(text), "status_display_type": StatusDisplayType.STATE}, site, kind)
+
+    def _next_update_at(self, now, reserve=0):
+        """Return the next safe monotonic time for SET_ACTIVITY under Discord's rolling update budget. `reserve` keeps
+        that many of the updates free for something more important."""
+        while self._update_times and now - self._update_times[0] >= self.RATE_WINDOW + self.RATE_GUARD:
+            self._update_times.popleft()
+        next_at = self._sent_at + self.MIN_GAP if self._sent_at else 0.0
+        cap = max(1, self.RATE_MAX - reserve)
+        if len(self._update_times) >= cap:
+            next_at = max(next_at, self._update_times[len(self._update_times) - cap] + self.RATE_WINDOW + self.RATE_GUARD)
+        return next_at
+
+    def _only_lyric_changed(self, want):
+        """True when Discord already shows this song and only the lyric line differs."""
+        sent = self._sent
+        if not sent or sent[0] != want[0] or sent[2:] != want[2:]:
+            return False
+        skip = ("state", "status_display_type")  # both change with the lyric line, in the same update
+        return {k: v for k, v in want[1].items() if k not in skip} == {k: v for k, v in sent[1].items() if k not in skip}
+
+    def _tick_locked(self, now, mono=None):
+        mono = time.monotonic() if mono is None else mono
+
+        if self._seen and now - self._seen > self.STALE:
+            self._want = None
+            self._pending = None
+            self._pending_since = 0.0
+            self._track = None
+            self._start_ts = None
+            self._paused_since = None
+
+        # Don't spend Discord update slots continuing old lyric lines while a new track is being debounced.
+        if self._pending:
+            if mono - self._pending_since < self.TRACK_DEBOUNCE:
+                return
+            key, kw, site, kind, track, start, playing = self._pending
+            self._want = (key, kw, site, kind)
+            self._track = track
+            self._start_ts = start if playing else None
+            self._pending = None
+            self._pending_since = 0.0
+            if playing:
+                self._paused_since = None
+            else:
+                self._paused_since = self._paused_since or now
+
+        if self._want and self._paused_since and now - self._paused_since > self.PAUSE_CLEAR:
+            self._want = None
+            self._track = None
+            self._start_ts = None
+            self._paused_since = None
+
+        want = self._with_lyrics(self._want, now)
+        if want is None:
+            if self._sent is not None or self._rpc is not None:
+                if mono < self._next_update_at(mono):
+                    return
+                self._drop()
+            return
+        if want == self._sent or now < self._backoff:
+            return
+        # a new lyric line may use all but one of the updates Discord allows, so a song change is never held up by lyrics
+        if mono < self._next_update_at(mono, 1 if self._only_lyric_changed(want) else 0):
+            return
+
+        key, kw, site, kind = want
+        app_id = EXT_SITES[site]["app_id"]
+        try:
+            if self._rpc is not None and self._rpc_id != app_id:
+                # Clear the old site's activity first. It consumes one update slot; the next
+                # scheduler pass will connect/send the new site's activity when budget allows.
+                self._drop()
+                return
+            if self._rpc is None:
+                rpc = Presence(app_id)
+                rpc.connect()
+                self._rpc, self._rpc_id = rpc, app_id
+            out = {k: v for k, v in kw.items() if v is not None}
+            out["activity_type"] = ActivityType.WATCHING if kind == "watching" else ActivityType.LISTENING
+            self._rpc.update(**out)
+            sent_at = time.monotonic()
+            self._sent, self._sent_at = want, sent_at
+            self._update_times.append(sent_at)
+            self._last_err = ""
+        except Exception as e:
+            # The failed SET_ACTIVITY may already have consumed the available slot. Close without
+            # immediately issuing a second (clear) activity update.
+            self._drop(clear=False)
+            self._backoff = now + 10  # Discord closed or not ready: try again in a moment
+            msg = f"Music presence: {e}"[:200]
+            if msg != self._last_err:  # say it once, so a problem isn't silent
+                self._last_err = msg
+                self.api._push("info", msg)
+
+
+class ExtService:
+    """A small web server on 127.0.0.1 that the browser extension talks to. It only answers requests that come from the
+    extension itself (its fixed origin): a web page can't use that origin, and another extension has a different one."""
+
+    MAX_BODY = 4 * 1024 * 1024
+
+    def __init__(self, api):
+        self.api = api
+        self.port = None
+        self._server = None
+        self.music = None
+
+    # -- life cycle
+    def start(self):
+        if self._server:
+            return True
+        import http.server
+        svc = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            server_version = "ANY-PRESENCE"
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *a):
+                pass
+
+            def do_OPTIONS(self):
+                svc._handle(self, "OPTIONS")
+
+            def do_GET(self):
+                svc._handle(self, "GET")
+
+            def do_POST(self):
+                svc._handle(self, "POST")
+
+        for port in EXT_PORTS:
+            try:
+                srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler)
+            except OSError:
+                continue
+            srv.daemon_threads = True
+            self._server, self.port = srv, port
+            threading.Thread(target=srv.serve_forever, daemon=True).start()
+            break
+        else:
+            return False
+        if self.music is None:
+            self.music = MusicPresence(self.api)
+        return True
+
+    def stop(self):
+        if self._server:
+            try:
+                self._server.shutdown()
+                self._server.server_close()
+            except Exception:
+                pass
+            self._server, self.port = None, None
+        if self.music:
+            self.music.shutdown()
+            self.music = None
+
+    # -- requests
+    def _reply(self, h, status, obj, origin=None):
+        body = json.dumps(obj).encode()
+        h.send_response(status)
+        h.send_header("Content-Type", "application/json")
+        h.send_header("Content-Length", str(len(body)))
+        h.send_header("Cache-Control", "no-store")
+        h.send_header("X-Content-Type-Options", "nosniff")
+        if origin:
+            h.send_header("Access-Control-Allow-Origin", origin)
+            h.send_header("Vary", "Origin")
+        h.end_headers()
+        h.wfile.write(body)
+
+    def _handle(self, h, method):
+        origin = h.headers.get("Origin")
+        host = (h.headers.get("Host") or "").lower()
+        # web pages can reach 127.0.0.1 too: only the extension is let in, and the Host must be this server's own
+        # address (which also stops DNS rebinding)
+        if host not in (f"127.0.0.1:{self.port}", f"localhost:{self.port}"):
+            return self._reply(h, 403, {"error": "forbidden"})
+        if origin not in EXT_ORIGINS:
+            return self._reply(h, 403, {"error": "forbidden"})
+        if method == "OPTIONS":
+            h.send_response(204)
+            if origin:
+                h.send_header("Access-Control-Allow-Origin", origin)
+                h.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+                h.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+                h.send_header("Access-Control-Max-Age", "600")
+            h.send_header("Content-Length", "0")
+            h.end_headers()
+            return
+        path = h.path.split("?", 1)[0]
+        data = {}
+        if method == "POST":
+            try:
+                n = int(h.headers.get("Content-Length") or 0)
+            except ValueError:
+                n = -1
+            if n < 0 or n > self.MAX_BODY:
+                h.close_connection = True  # the body is never read
+                return self._reply(h, 413, {"error": "too large"}, origin)
+            try:
+                data = json.loads(h.rfile.read(n) or b"{}")
+                if not isinstance(data, dict):
+                    raise ValueError
+            except ValueError:
+                return self._reply(h, 400, {"error": "bad request"}, origin)
+        try:
+            if method == "POST" and path == "/ping":
+                return self._reply(h, 200, {"app": APP_NAME, "version": APP_VERSION}, origin)
+            if method == "POST" and path == "/state":
+                return self._reply(h, 200, self._state(), origin)
+            if method == "POST" and path == "/media":
+                if self.music:
+                    self.music.report(data)
+                return self._reply(h, 200, {"ok": True}, origin)
+            if method == "POST" and path == "/clear":
+                if self.music:
+                    self.music.clear()
+                return self._reply(h, 200, {"ok": True}, origin)
+            if method == "POST" and path == "/lyrics":
+                req = {}
+                if "pick" in data and (data["pick"] is None or (isinstance(data["pick"], int) and not isinstance(data["pick"], bool))):
+                    req["pick"] = data["pick"]
+                if isinstance(data.get("search"), str):
+                    req["search"] = data["search"][:100]
+                return self._reply(h, 200, self.music.lyric_view(req) if self.music else {"options": []}, origin)
+            if method == "POST" and path == "/settings":
+                return self._reply(h, 200, self._settings(data), origin)
+            return self._reply(h, 404, {"error": "not found"}, origin)
+        except Exception:
+            return self._reply(h, 500, {"error": "failed"}, origin)
+
+    def _state(self):
+        cfg = self.api._cfg["ext"]
+        sites = {k: {**cfg["sites"][k], "name": v["name"]} for k, v in EXT_SITES.items()}
+        return {"version": APP_VERSION, **{k: cfg[k] for k in EXT_GLOBAL_DEFAULTS}, "sites": sites,
+                "showing": bool(self.music and self.music.showing()), "game": self.api._running}
+
+    def _settings(self, data):
+        cfg = self.api._cfg["ext"]
+        for k in EXT_GLOBAL_DEFAULTS:
+            if isinstance(data.get(k), bool):
+                cfg[k] = data[k]
+        site = data.get("site")
+        if site in cfg["sites"] and isinstance(data.get("set"), dict):
+            patch = dict(data["set"])
+            err = None
+            if isinstance(patch.get("icon_data"), str):  # an image picked in the extension: host it like the app does
+                data_url = patch.pop("icon_data")
+                try:
+                    img = load_source(data_url)
+                    patch["icon_url"] = self.api._host_png(to_png(render_crop(img, crop_square(img.size, CENTER), 0, ICON_SIZE)))
+                except Exception as e:
+                    err = str(e)
+                    patch.pop("icon", None)  # no picture was saved: don't switch to a custom icon that doesn't exist
+            clean_ext_site(cfg["sites"][site], patch)
+            if err:
+                save_config(self.api._cfg)
+                return {**self._state(), "error": err}
+        save_config(self.api._cfg)
+        if self.music and (not cfg["enabled"]):
+            self.music.clear()
+        elif self.music and site in cfg["sites"] and not cfg["sites"][site]["on"]:
+            self.music.clear_site(site)
+        return self._state()
+
+
 class Api:
     """Every public method here can be called from the page as `pywebview.api.<name>(...)`."""
 
@@ -1654,6 +2542,7 @@ class Api:
         self._cfg = load_config()
         apply_network(self._cfg["network"])
         self._window = None
+        self._ext = None
         self._updating = False
         self._rpc = None
         self._running = False
@@ -1711,6 +2600,7 @@ class Api:
             "startup": get_startup_value() is not None, "startup_available": winreg is not None,
             "tray_available": pystray is not None, "apps": cfg["apps"],
             "recent": cfg["recent"],
+            "ext_on": cfg["ext_on"],
         }
 
     def set_setting(self, key, value):
@@ -1729,6 +2619,15 @@ class Api:
             self._cfg[key] = str(value).strip()
         elif key == "theme":
             self._cfg[key] = value if value in THEME_IDS and (value != "custom" or self._cfg.get("custom_theme")) else "rose"
+        elif key == "ext_on":
+            self._cfg["ext_on"] = bool(value)
+            if self._cfg["ext_on"]:
+                if not self._start_ext():
+                    self._cfg["ext_on"] = False
+                    save_config(self._cfg)
+                    return {"error": "Couldn't open the local connection the extension needs."}
+            else:
+                self._stop_ext()
         elif key == "update_later":
             self._cfg[key] = str(value or "").strip()[:40]
         elif key in ("app_id", "nsfw", "show_timer", "auto_stop", "auto_detect", "check_updates"):
@@ -1737,6 +2636,16 @@ class Api:
             self._cfg["sources"][key[7:]] = bool(value)
         save_config(self._cfg)
         return True
+
+    def _start_ext(self):
+        if self._ext is None:
+            self._ext = ExtService(self)
+        return self._ext.start()
+
+    def _stop_ext(self):
+        if self._ext:
+            self._ext.stop()
+            self._ext = None
 
     def set_custom_theme(self, name, colors):
         ct = clean_custom_theme({"name": name, "colors": colors})
@@ -1947,6 +2856,7 @@ class Api:
 
     def _quit_app(self):
         save_config(self._cfg)
+        self._stop_ext()
         self.stop(quiet=True, by_user=False)
         self._stop_tray()
         if self._window:
@@ -2504,6 +3414,8 @@ class Api:
 
     # ---- auto-detect: saved apps turn the presence on by themselves
     def _start_background(self):
+        if self._cfg["ext_on"]:
+            self._start_ext()
         threading.Thread(target=self._auto_loop, daemon=True).start()
         threading.Thread(target=self._update_check_later, daemon=True).start()
         threading.Thread(target=self._warm_banners, daemon=True).start()
@@ -2775,6 +3687,8 @@ class Api:
         if self._rpc:
             try:
                 self._rpc.clear()
+                if self._ext and self._ext.music:
+                    self._ext.music.note_external_update()
                 self._rpc.close()
             except Exception:
                 pass
@@ -2802,6 +3716,8 @@ class Api:
             "buttons": clean_buttons(p.get("buttons")) or None,
         }
         self._rpc.update(**{k: v for k, v in kw.items() if v is not None and k in params})
+        if self._ext and self._ext.music:
+            self._ext.music.note_external_update()
 
     def _monitor(self, my_id):
         """While the presence is on: stops it when the chosen program closes, and brings it back if Discord restarts."""
