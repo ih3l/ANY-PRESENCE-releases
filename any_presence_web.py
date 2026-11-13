@@ -50,7 +50,7 @@ def apply_network(mode):
 
 APP_NAME = "ANY-PRESENCE"
 WINDOW_SIZE = (860, 580)  # the window has one fixed size
-APP_VERSION = "1.3.0" # app version @_@
+APP_VERSION = "1.4.0" # app version @_@
 DEFAULT_APP_ID = "1557320467474292756"  # used unless the person adds their own in Settings
 UPDATE_REPO = "ih3l/ANY-PRESENCE-releases"  # public repo used to check for the updates
 UPDATE_ASSET = "ANY-PRESENCE.exe"
@@ -114,6 +114,8 @@ def default_config():
         "apps": [],  # saved apps (see save_current_app)
         "ext_on": False,  # lets the browser extension talk to the app (a local server)
         "ext": None,  # the extension's settings (see clean_ext)
+        "spotify_id": "", "spotify_secret": "",  # optional: a free Spotify developer app, for the exact cover of a song at once
+        "desktop_spotify": False,  # also read the Spotify desktop app (from Windows' media controls)
         "lyric_pick": {},  # song -> the id of the LRCLIB lyrics chosen for it in the extension (-1: none)
         "sources": {},  # filled in below once SOURCES exists
     }
@@ -181,6 +183,10 @@ def load_config():
                 cfg["sources"][key] = bool(value)
         cfg["ext_on"] = bool(data.get("ext_on"))
         cfg["ext"] = data.get("ext")
+        cfg["desktop_spotify"] = bool(data.get("desktop_spotify"))
+        for k in ("spotify_id", "spotify_secret"):
+            if isinstance(data.get(k), str):
+                cfg[k] = data[k].strip()[:100]
         if isinstance(data.get("lyric_pick"), dict):
             cfg["lyric_pick"] = {k[:300]: v for k, v in list(data["lyric_pick"].items())[-500:]
                                  if isinstance(k, str) and isinstance(v, int) and not isinstance(v, bool)}
@@ -1671,7 +1677,7 @@ EXT_SITES = {  # one Discord application per site: its name is what Discord show
                    "images": ("sndcdn.com",), "button": "Listen on SoundCloud"},
     # Dedicated Spotify application ID supplied for Spotify Web Rich Presence.
     "spotify": {"name": "Spotify", "app_id": "1569051949674795209", "kind": "listening", "hosts": ("spotify.com",),
-                "images": ("scdn.co", "spotifycdn.com"), "button": "Listen on Spotify"},
+                "images": ("scdn.co", "spotifycdn.com", "mzstatic.com", "ibb.co"), "button": "Listen on Spotify"},
 }
 EXT_SITE_DEFAULTS = {"on": True, "icon": "song", "status": "title", "nolyrics": "notes", "kind": "listening", "button": True, "clean": False, "icon_url": ""}
 EXT_GLOBAL_DEFAULTS = {"enabled": True, "with_game": True, "pause_hidden": False, "private": False}
@@ -1696,22 +1702,26 @@ def clean_ext(raw):
     for sid, cur in out["sites"].items():
         got = (raw.get("sites") or {}).get(sid) if isinstance(raw.get("sites"), dict) else None
         if isinstance(got, dict):
-            clean_ext_site(cur, got)
+            clean_ext_site(cur, got, EXT_SITES[sid].get("music", True))
     return out
 
 
-def clean_ext_site(cur, patch):
-    """Apply the allowed fields of a site's settings change to `cur`."""
-    if (patch.get("lyrics") is True and "status" not in patch) or cur.get("lyrics") is True:  # the old Lyrics switch is now a choice of Status shows
+def clean_ext_site(cur, patch, music=True):
+    """Apply the allowed fields of a site's settings change to `cur`. A site that isn't music has no lyrics or playlists."""
+    if music and ((patch.get("lyrics") is True and "status" not in patch) or cur.get("lyrics") is True):  # the old Lyrics switch is now a choice of Status shows
         cur["status"] = "lyrics"
     cur.pop("lyrics", None)
     for k in ("on", "button", "clean"):
         if isinstance(patch.get(k), bool):
             cur[k] = patch[k]
-    for k, allowed in (("icon", ("song", "playlist", "custom")), ("status", ("title", "artist", "lyrics", "name")), ("nolyrics", ("notes", "title", "name")),
-                       ("kind", ("listening", "watching"))):
+    for k, allowed in (("icon", ("song", "playlist", "custom") if music else ("song", "custom")),
+                       ("status", ("title", "artist", "lyrics", "name") if music else ("title", "artist", "name")),
+                       ("nolyrics", ("notes", "title", "name")), ("kind", ("listening", "watching"))):
         if patch.get(k) in allowed:
             cur[k] = patch[k]
+    if not music:
+        cur["status"] = "title" if cur.get("status") == "lyrics" else cur.get("status", "title")
+        cur["icon"] = "song" if cur.get("icon") == "playlist" else cur.get("icon", "song")
     if isinstance(patch.get("icon_url"), str) and (patch["icon_url"] == "" or patch["icon_url"].startswith("https://")):
         cur["icon_url"] = patch["icon_url"][:512]
 
@@ -2056,6 +2066,8 @@ class MusicPresence:
         self._sent_at = 0.0  # monotonic time of the last successful SET_ACTIVITY
         self._update_times = deque()  # successful SET_ACTIVITY times, shared across this class's site app IDs
         self._seen = 0.0
+        self._now = None  # what is playing, for the app's Music tab (even when nothing is shown on Discord)
+        self._remote_at = {}  # site -> when the extension last reported it (the desktop app steps aside for it)
         self._paused_since = None
         self._backoff = 0.0
         self._last_err = ""
@@ -2066,7 +2078,7 @@ class MusicPresence:
         threading.Thread(target=self._loop, daemon=True).start()
 
     # -- what the extension reports
-    def report(self, data):
+    def report(self, data, local=False):
         site = EXT_SITES.get(data.get("site"))
         if not site:
             return
@@ -2075,7 +2087,20 @@ class MusicPresence:
         now = time.time()
         mono = time.monotonic()
         with self._lock:
+            if local:  # from the desktop app: the extension, when it is reporting the same site, goes first
+                if now - self._remote_at.get(data["site"], 0) < 15:
+                    return
+            else:
+                self._remote_at[data["site"]] = now
             self._seen = now
+            if data.get("title"):
+                p0, d0 = data.get("position"), data.get("duration")
+                p0 = float(p0) if isinstance(p0, (int, float)) and 0 <= p0 < 86400 else None
+                d0 = float(d0) if isinstance(d0, (int, float)) and 0 < d0 < 86400 else None
+                img0 = data.get("image")
+                self._now = {"site": data["site"], "title": clip_text(str(data["title"])), "artist": clip_text(str(data.get("artist") or "")),
+                             "image": spotify_hires(img0) if host_matches(img0, site["images"]) else None, "playing": bool(data.get("playing")),
+                             "start": (now - p0) if data.get("playing") and p0 is not None else None, "duration": d0, "at": now}
             if not cfg["enabled"] or not sc["on"] or not data.get("title") or (self.api._running and not cfg["with_game"]):
                 self._want = None
                 self._pending = None
@@ -2087,7 +2112,8 @@ class MusicPresence:
 
             playing = bool(data.get("playing"))
             title, artist = str(data["title"]), str(data.get("artist") or "")
-            if sc.get("clean"):
+            music = site.get("music", True)
+            if sc.get("clean") and music:
                 title, artist = clean_track(title, artist)
             title, artist = clip_text(title), clip_text(artist) or None
             hires = lambda u: re.sub(r"(/image/ab67616d0000)[0-9a-f]{4}", r"\g<1>b273", re.sub(r"(/image/ab6765630000)[0-9a-f]{4}", r"\g<1>ba8a", u)) if isinstance(u, str) else u  # Spotify's 640 px cover
@@ -2101,7 +2127,7 @@ class MusicPresence:
             # the artist is on the line that appears when the cover is hovered
             state = "\u266a\u266a\u266a" if sc["status"] == "lyrics" else pad2(artist)
             kw = {"details": pad2(title), "state": state if playing else "Paused", "large_image": icon or None,
-                  "large_text": f"{artist} \U0001F399" if artist and sc["status"] != "artist" else None,  # not twice
+                  "large_text": f"{artist} \U0001F399" if music and artist and sc["status"] != "artist" else None,  # not twice
                   "status_display_type": {"name": StatusDisplayType.NAME, "artist": StatusDisplayType.STATE, "lyrics": StatusDisplayType.STATE, "title": StatusDisplayType.DETAILS}[sc["status"]]}
             if sc["status"] == "artist" and not artist:
                 kw["status_display_type"] = StatusDisplayType.DETAILS
@@ -2154,8 +2180,15 @@ class MusicPresence:
                 lyric_key = (track["title"], track["artist"], round(track["dur"] or 0))
                 self.lyrics.options(lyric_key, track["title"], track["artist"], track["dur"])
 
+    def now(self):
+        """What is playing (None when nothing has been reported for a while)."""
+        with self._lock:
+            n = self._now
+            return dict(n) if n and time.time() - n["at"] <= self.STALE else None
+
     def clear(self):
         with self._lock:
+            self._now = None
             self._want = None
             self._pending = None
             self._pending_since = 0.0
@@ -2167,6 +2200,8 @@ class MusicPresence:
     def clear_site(self, site):
         """Take down what is shown for one site (it was switched off: the extension stops reporting it)."""
         with self._lock:
+            if self._now and self._now["site"] == site:
+                self._now = None
             if (self._want and self._want[2] == site) or (self._pending and self._pending[2] == site):
                 self.clear()
 
@@ -2363,6 +2398,231 @@ class MusicPresence:
                 self.api._push("info", msg)
 
 
+_SPOTIFY_TOKEN = {"key": None, "token": "", "until": 0.0}
+
+
+def spotify_cover(client_id, secret, title, artist, duration=None):
+    """The cover of the song from Spotify's own search, with the person's free developer app (no login of theirs):
+    the exact picture, found in a fraction of a second. "" when it can't be found."""
+    try:
+        now = time.time()
+        if _SPOTIFY_TOKEN["key"] != (client_id, secret) or now > _SPOTIFY_TOKEN["until"]:
+            r = requests.post("https://accounts.spotify.com/api/token", data={"grant_type": "client_credentials"},
+                              auth=(client_id, secret), timeout=6)
+            if not r.ok:
+                _SPOTIFY_TOKEN.update(key=None, token="", until=now + 30)  # wrong keys: don't ask again at every song
+                return ""
+            body = r.json()
+            _SPOTIFY_TOKEN.update(key=(client_id, secret), token=body["access_token"], until=now + int(body.get("expires_in", 3600)) - 60)
+        if not _SPOTIFY_TOKEN["token"]:
+            return ""
+        best, best_score = "", None
+        for q in (f'track:"{title}" artist:"{artist}"', f"{title} {artist}"):
+            r = requests.get("https://api.spotify.com/v1/search", params={"q": q[:200], "type": "track", "limit": 10},
+                             headers={"Authorization": "Bearer " + _SPOTIFY_TOKEN["token"]}, timeout=6)
+            if not r.ok:
+                continue
+            for x in (r.json().get("tracks") or {}).get("items") or []:
+                imgs = (x.get("album") or {}).get("images") or []
+                url = str(imgs[0].get("url") or "") if imgs else ""
+                if not host_matches(url, ("scdn.co",)):
+                    continue
+                found = {"trackName": x.get("name"), "artistName": ", ".join(a.get("name", "") for a in x.get("artists") or []),
+                         "duration": (x.get("duration_ms") or 0) / 1000}
+                score = lyric_match(found, title, artist, duration)
+                if score is not None and (best_score is None or score > best_score):
+                    best, best_score = url, score
+            if best:
+                break
+        return best
+    except Exception:
+        return ""
+
+
+def spotify_hires(u):
+    """Spotify's 640 px cover instead of the small one."""
+    return re.sub(r"(/image/ab67616d0000)[0-9a-f]{4}", r"\g<1>b273", re.sub(r"(/image/ab6765630000)[0-9a-f]{4}", r"\g<1>ba8a", u)) if isinstance(u, str) else u
+
+
+def itunes_cover(title, artist, duration=None):
+    """A cover for a song the desktop app reports (it has no picture to give): the best matching result of Apple's
+    public search, or "" when nothing fits."""
+    try:
+        r = requests.get("https://itunes.apple.com/search", params={"term": f"{artist} {title}"[:200], "entity": "song", "limit": 8}, timeout=6)
+        best, best_score = "", None
+        for x in r.json().get("results", []):
+            url = str(x.get("artworkUrl100") or "")
+            if not host_matches(url, ("mzstatic.com",)):
+                continue
+            found = {"trackName": x.get("trackName"), "artistName": x.get("artistName"), "duration": (x.get("trackTimeMillis") or 0) / 1000}
+            score = lyric_match(found, title, artist, duration)
+            if score is not None and (best_score is None or score > best_score):
+                best, best_score = re.sub(r"/\d+x\d+(bb)?\.", "/600x600bb.", url), score
+        return best
+    except Exception:
+        return ""
+
+
+class SpotifyDesktop:
+    """Reads the Spotify desktop app from Windows' media controls (no browser or extension involved) and reports it the
+    way the extension does, so the presence, its settings and the lyrics are the same."""
+
+    POLL = 0.5
+    WAIT = object()  # a new song whose cover is still being found
+    PLAYING = 4  # GlobalSystemMediaTransportControlsSessionPlaybackStatus.PLAYING
+
+    def __init__(self, api):
+        self.api = api
+        self._stop = threading.Event()
+        self._shown = False
+        self._covers = {}  # (title, artist) -> url, or "" when none was found
+        self._asked = {}  # (title, artist) -> when the cover was first asked for
+        threading.Thread(target=self._run, daemon=True).start()
+
+    @staticmethod
+    def available():
+        try:
+            from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager  # noqa: F401
+            return True
+        except Exception:
+            return False
+
+    def stop(self):
+        self._stop.set()
+        if self._shown and self.api._music:
+            self.api._music.clear_site("spotify")
+        self._shown = False
+
+    def _run(self):
+        import asyncio
+        try:
+            asyncio.run(self._loop())
+        except Exception as e:
+            self.api._push("info", f"Spotify app: {e}"[:200])
+
+    async def _loop(self):
+        import asyncio
+        from winrt.windows.media.control import GlobalSystemMediaTransportControlsSessionManager as Manager
+        manager = await Manager.request_async()
+        while not self._stop.is_set():
+            try:
+                data = await self._read(manager)
+            except Exception:
+                data = None
+            music = self.api._music
+            if data is self.WAIT:
+                pass
+            elif music and not self._stop.is_set():
+                if data:
+                    self._shown = True
+                    music.report(data, local=True)
+                elif self._shown:
+                    self._shown = False
+                    music.clear_site("spotify")
+            await asyncio.sleep(self.POLL)
+
+    @staticmethod
+    async def _thumbnail(props):
+        """The picture Spotify gives Windows for the song, as bytes (None when there is none)."""
+        try:
+            from winrt.windows.storage.streams import Buffer, DataReader, InputStreamOptions
+            stream = await props.thumbnail.open_read_async()
+            size = int(stream.size)
+            if not 0 < size < 8 * 1024 * 1024:
+                return None
+            buf = Buffer(size)
+            await stream.read_async(buf, size, InputStreamOptions.READ_AHEAD)
+            out = bytearray(buf.length)
+            DataReader.from_buffer(buf).read_bytes(out)
+            return bytes(out)
+        except Exception:
+            return None
+
+    async def _read(self, manager):
+        session = next((s for s in manager.get_sessions() if "spotify" in str(s.source_app_user_model_id or "").lower()), None)
+        if session is None:
+            return None
+        props = await session.try_get_media_properties_async()
+        title, artist = str(props.title or "").strip(), str(props.artist or "").strip()
+        if not title or title == "Advertisement":
+            return None
+        secs = lambda t: t.total_seconds() if hasattr(t, "total_seconds") else float(t or 0) / 1e7
+        tl = session.get_timeline_properties()
+        start, end, pos = secs(tl.start_time), secs(tl.end_time), secs(tl.position)
+        dur = end - start if end - start > 0 else None
+        playing = int(session.get_playback_info().playback_status) == self.PLAYING
+        if playing:  # the position is only written when it changes: add the time that has passed since
+            upd = tl.last_updated_time
+            if hasattr(upd, "timestamp"):
+                if upd.tzinfo is None:
+                    from datetime import timezone
+                    upd = upd.replace(tzinfo=timezone.utc)
+                pos += max(0.0, min(time.time() - upd.timestamp(), 6 * 3600))
+        pos = max(0.0, pos - start)
+        if dur:
+            pos = min(pos, dur)
+        key = (title.lower(), artist.lower())
+        if key not in self._covers and key not in self._asked:
+            self._asked[key] = time.monotonic()
+            raw = await self._thumbnail(props) if self.api._cfg.get("imgbb_key") else None
+            sid, ssecret = self.api._cfg.get("spotify_id"), self.api._cfg.get("spotify_secret")
+            def fetch():
+                url = spotify_cover(sid, ssecret, title, artist, dur) if sid and ssecret else ""
+                if not url and raw:  # the real cover, as Spotify gives it to Windows, hosted on ImgBB (the same copy is reused for an album)
+                    try:
+                        img = ImageOps.exif_transpose(Image.open(io.BytesIO(raw))).convert("RGB")
+                        img.thumbnail((320, 320))  # small, so the upload is quick: Discord shows it small anyway
+                        out = io.BytesIO()
+                        img.save(out, "JPEG", quality=85)
+                        url = self.api._host_png(out.getvalue(), "sp:" + hashlib.sha256(raw).hexdigest())
+                    except Exception:
+                        url = ""
+                self._covers[key] = url or itunes_cover(title, artist, dur)
+                if len(self._covers) > 200:
+                    self._covers.pop(next(iter(self._covers)), None)
+            threading.Thread(target=fetch, daemon=True).start()
+        if key not in self._covers and time.monotonic() - self._asked.get(key, 0) < 1.5:
+            return self.WAIT  # a new song waits a moment for its cover, so it is shown once
+        return {"site": "spotify", "title": title, "artist": artist, "playing": playing, "position": pos, "duration": dur,
+                "image": self._covers.get(key) or None,
+                "url": "https://open.spotify.com/search/" + quote(f"{artist} {title}"[:200])}
+
+
+def ext_state(api, music=None):
+    cfg = api._cfg["ext"]
+    sites = {k: {**cfg["sites"][k], "name": v["name"], "music": v.get("music", True)} for k, v in EXT_SITES.items()}
+    return {"version": APP_VERSION, **{k: cfg[k] for k in EXT_GLOBAL_DEFAULTS}, "sites": sites,
+            "showing": bool(music and music.showing()), "game": api._running}
+
+
+def ext_apply(api, data):
+    """Apply a change to the extension's settings (from the extension's popup or the app's Music tab)."""
+    cfg = api._cfg["ext"]
+    music = api._music
+    for k in EXT_GLOBAL_DEFAULTS:
+        if isinstance(data.get(k), bool):
+            cfg[k] = data[k]
+    site = data.get("site")
+    err = None
+    if site in cfg["sites"] and isinstance(data.get("set"), dict):
+        patch = dict(data["set"])
+        if isinstance(patch.get("icon_data"), str):  # an image picked in the extension: host it like the app does
+            data_url = patch.pop("icon_data")
+            try:
+                img = load_source(data_url)
+                patch["icon_url"] = api._host_png(to_png(render_crop(img, crop_square(img.size, CENTER), 0, ICON_SIZE)))
+            except Exception as e:
+                err = str(e)
+                patch.pop("icon", None)  # no picture was saved: don't switch to a custom icon that doesn't exist
+        clean_ext_site(cfg["sites"][site], patch, EXT_SITES[site].get("music", True))
+    save_config(api._cfg)
+    if music and (not cfg["enabled"]):
+        music.clear()
+    elif music and site in cfg["sites"] and not cfg["sites"][site]["on"]:
+        music.clear_site(site)
+    return {**ext_state(api, music), "error": err} if err else ext_state(api, music)
+
+
 class ExtService:
     """A small web server on 127.0.0.1 that the browser extension talks to. It only answers requests that come from the
     extension itself (its fixed origin): a web page can't use that origin, and another extension has a different one."""
@@ -2410,7 +2670,7 @@ class ExtService:
         else:
             return False
         if self.music is None:
-            self.music = MusicPresence(self.api)
+            self.music = self.api._ensure_music()
         return True
 
     def stop(self):
@@ -2421,9 +2681,8 @@ class ExtService:
             except Exception:
                 pass
             self._server, self.port = None, None
-        if self.music:
-            self.music.shutdown()
-            self.music = None
+        self.music = None
+        self.api._release_music()
 
     # -- requests
     def _reply(self, h, status, obj, origin=None):
@@ -2501,38 +2760,10 @@ class ExtService:
             return self._reply(h, 500, {"error": "failed"}, origin)
 
     def _state(self):
-        cfg = self.api._cfg["ext"]
-        sites = {k: {**cfg["sites"][k], "name": v["name"]} for k, v in EXT_SITES.items()}
-        return {"version": APP_VERSION, **{k: cfg[k] for k in EXT_GLOBAL_DEFAULTS}, "sites": sites,
-                "showing": bool(self.music and self.music.showing()), "game": self.api._running}
+        return ext_state(self.api, self.music)
 
     def _settings(self, data):
-        cfg = self.api._cfg["ext"]
-        for k in EXT_GLOBAL_DEFAULTS:
-            if isinstance(data.get(k), bool):
-                cfg[k] = data[k]
-        site = data.get("site")
-        if site in cfg["sites"] and isinstance(data.get("set"), dict):
-            patch = dict(data["set"])
-            err = None
-            if isinstance(patch.get("icon_data"), str):  # an image picked in the extension: host it like the app does
-                data_url = patch.pop("icon_data")
-                try:
-                    img = load_source(data_url)
-                    patch["icon_url"] = self.api._host_png(to_png(render_crop(img, crop_square(img.size, CENTER), 0, ICON_SIZE)))
-                except Exception as e:
-                    err = str(e)
-                    patch.pop("icon", None)  # no picture was saved: don't switch to a custom icon that doesn't exist
-            clean_ext_site(cfg["sites"][site], patch)
-            if err:
-                save_config(self.api._cfg)
-                return {**self._state(), "error": err}
-        save_config(self.api._cfg)
-        if self.music and (not cfg["enabled"]):
-            self.music.clear()
-        elif self.music and site in cfg["sites"] and not cfg["sites"][site]["on"]:
-            self.music.clear_site(site)
-        return self._state()
+        return ext_apply(self.api, data)
 
 
 class Api:
@@ -2543,6 +2774,8 @@ class Api:
         apply_network(self._cfg["network"])
         self._window = None
         self._ext = None
+        self._music = None  # the presence made from the extension and the Spotify app (see MusicPresence)
+        self._spotify = None
         self._updating = False
         self._rpc = None
         self._running = False
@@ -2601,6 +2834,8 @@ class Api:
             "tray_available": pystray is not None, "apps": cfg["apps"],
             "recent": cfg["recent"],
             "ext_on": cfg["ext_on"],
+            "desktop_spotify": cfg["desktop_spotify"], "spotify_id": cfg["spotify_id"], "spotify_secret": cfg["spotify_secret"],
+            "spotify_lyrics": cfg["ext"]["sites"]["spotify"]["status"] == "lyrics",
         }
 
     def set_setting(self, key, value):
@@ -2628,6 +2863,19 @@ class Api:
                     return {"error": "Couldn't open the local connection the extension needs."}
             else:
                 self._stop_ext()
+        elif key == "desktop_spotify":
+            self._cfg["desktop_spotify"] = bool(value)
+            if self._cfg["desktop_spotify"]:
+                if not self._start_spotify():
+                    self._cfg["desktop_spotify"] = False
+                    save_config(self._cfg)
+                    return {"error": "Reading the Spotify app needs Windows 10 or later with the winrt packages installed."}
+            else:
+                self._stop_spotify()
+        elif key in ("spotify_id", "spotify_secret"):
+            self._cfg[key] = str(value).strip()[:100]
+        elif key == "spotify_lyrics":
+            self._cfg["ext"]["sites"]["spotify"]["status"] = "lyrics" if value else "title"
         elif key == "update_later":
             self._cfg[key] = str(value or "").strip()[:40]
         elif key in ("app_id", "nsfw", "show_timer", "auto_stop", "auto_detect", "check_updates"):
@@ -2637,6 +2885,27 @@ class Api:
         save_config(self._cfg)
         return True
 
+    # ---- the Music tab
+    def music_now(self, req=None):
+        """What is playing, the settings of the sites and the lyrics found for the song (`req` may pick or search)."""
+        m = self._music
+        n = m.now() if m else None
+        out = {**ext_state(self, m), "now": n, "lyrics": None}
+        if n and EXT_SITES[n["site"]].get("music", True) and isinstance(req, dict):
+            r = {}
+            if "pick" in req and (req["pick"] is None or (isinstance(req["pick"], int) and not isinstance(req["pick"], bool))):
+                r["pick"] = req["pick"]
+            if isinstance(req.get("search"), str):
+                r["search"] = req["search"][:100]
+            out["lyrics"] = m.lyric_view(r)
+        return out
+
+    def music_set(self, site, patch):
+        if site not in EXT_SITES or not isinstance(patch, dict):
+            return False
+        ext_apply(self, {"site": site, "set": {k: v for k, v in patch.items() if k in EXT_SITE_DEFAULTS}})
+        return True
+
     def _start_ext(self):
         if self._ext is None:
             self._ext = ExtService(self)
@@ -2644,8 +2913,32 @@ class Api:
 
     def _stop_ext(self):
         if self._ext:
-            self._ext.stop()
-            self._ext = None
+            ext, self._ext = self._ext, None
+            ext.stop()
+
+    def _ensure_music(self):
+        if self._music is None:
+            self._music = MusicPresence(self)
+        return self._music
+
+    def _release_music(self):
+        if self._music and not self._ext and not self._spotify:
+            self._music.shutdown()
+            self._music = None
+
+    def _start_spotify(self):
+        if self._spotify is None:
+            if not SpotifyDesktop.available():
+                return False
+            self._ensure_music()
+            self._spotify = SpotifyDesktop(self)
+        return True
+
+    def _stop_spotify(self):
+        if self._spotify:
+            spotify, self._spotify = self._spotify, None
+            spotify.stop()
+        self._release_music()
 
     def set_custom_theme(self, name, colors):
         ct = clean_custom_theme({"name": name, "colors": colors})
@@ -2780,7 +3073,7 @@ class Api:
     # ---- links
     def open_link(self, url):
         host = urlparse(str(url)).hostname if str(url).startswith("https://") else None
-        if url in ("https://discord.com/developers/applications", "https://api.imgbb.com/", "https://ih3l.github.io/ANY-PRESENCE-releases/terms.html") or host in INFO_HOSTS:
+        if url in ("https://discord.com/developers/applications", "https://api.imgbb.com/", "https://developer.spotify.com/dashboard", "https://ih3l.github.io/ANY-PRESENCE-releases/terms.html") or host in INFO_HOSTS:
             import webbrowser
             webbrowser.open(url)
 
@@ -2857,6 +3150,7 @@ class Api:
     def _quit_app(self):
         save_config(self._cfg)
         self._stop_ext()
+        self._stop_spotify()
         self.stop(quiet=True, by_user=False)
         self._stop_tray()
         if self._window:
@@ -3416,6 +3710,8 @@ class Api:
     def _start_background(self):
         if self._cfg["ext_on"]:
             self._start_ext()
+        if self._cfg["desktop_spotify"] and not self._start_spotify():
+            self._cfg["desktop_spotify"] = False
         threading.Thread(target=self._auto_loop, daemon=True).start()
         threading.Thread(target=self._update_check_later, daemon=True).start()
         threading.Thread(target=self._warm_banners, daemon=True).start()
@@ -3687,8 +3983,8 @@ class Api:
         if self._rpc:
             try:
                 self._rpc.clear()
-                if self._ext and self._ext.music:
-                    self._ext.music.note_external_update()
+                if self._music:
+                    self._music.note_external_update()
                 self._rpc.close()
             except Exception:
                 pass
@@ -3716,8 +4012,8 @@ class Api:
             "buttons": clean_buttons(p.get("buttons")) or None,
         }
         self._rpc.update(**{k: v for k, v in kw.items() if v is not None and k in params})
-        if self._ext and self._ext.music:
-            self._ext.music.note_external_update()
+        if self._music:
+            self._music.note_external_update()
 
     def _monitor(self, my_id):
         """While the presence is on: stops it when the chosen program closes, and brings it back if Discord restarts."""

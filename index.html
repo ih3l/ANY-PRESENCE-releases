@@ -138,6 +138,10 @@ input::placeholder{color:var(--muted)}
 @keyframes shimmer{to{background-position:-200% 0}}
 
 /* the Discord-style preview */
+.mt{font-size:17px;font-weight:700;line-height:1.3;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ms{color:var(--discord-text);height:24px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#mset .row-set{border-bottom:1px solid var(--border)}#mset .row-set:last-child{border-bottom:0}#mset .seg button{padding:5px 11px}#mset input.url{width:100%;height:36px;background:var(--input);border:1px solid var(--border);border-radius:10px;padding:0 12px;outline:0;margin:2px 0 8px}#mset input.url:focus{border-color:var(--accent-on)}
+.res.pick{cursor:pointer}.res .t small.pv{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;display:block}.res .badge{font-size:10.5px;font-weight:600;color:var(--accent-on);flex:none}
+.mhint{color:var(--muted);padding:6px 2px;line-height:1.5}
 .sec{display:flex;align-items:center;justify-content:space-between;height:38px;flex:none}
 .card{background:var(--discord);border:1px solid var(--border);border-radius:14px;padding:12px 16px 14px;margin-top:10px}
 .card.flash{animation:glow .9s ease-out}
@@ -460,6 +464,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
   <div class="shell">
     <aside class="rail">
       <button class="rail-btn on" data-tab="presence" aria-label="Presence" title="Presence"><svg viewBox="0 0 16 16"><path d="M4.5 2.8v10.4a.5.5 0 00.77.42l8.1-5.2a.5.5 0 000-.84l-8.1-5.2a.5.5 0 00-.77.42z"/></svg></button>
+      <button class="rail-btn" data-tab="music" aria-label="Music" title="Music"><svg viewBox="0 0 16 16"><path d="M6 12V3.5l7-1.5v8.5"/><circle cx="4.5" cy="12" r="1.6"/><circle cx="11.5" cy="10.5" r="1.6"/></svg></button>
       <button class="rail-btn" data-tab="apps" aria-label="My apps" title="My apps"><svg viewBox="0 0 16 16"><path d="M4 2.5h8a.5.5 0 01.5.5v10.5L8 10.5l-4.5 3V3a.5.5 0 01.5-.5z"/></svg></button>
       <button class="rail-btn" data-tab="recent" aria-label="My Games" title="My Games"><svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.2"/></svg></button>
       <div class="sp"></div>
@@ -527,6 +532,33 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
         </div>
       </section>
 
+      <section class="page" id="page-music">
+        <div class="col">
+          <div class="sec"><h2>Lyrics</h2></div>
+          <div class="row" style="margin-top:12px">
+            <label class="field"><svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>
+              <input id="mq" placeholder="Search lyrics" autocomplete="off" spellcheck="false"></label>
+            <button class="btn" id="mgo">Search</button>
+          </div>
+          <div class="results" id="mlyrics"></div>
+        </div>
+        <div class="col scroll">
+          <div class="sec"><h2>On Discord</h2><div class="seg" id="msites"></div></div>
+          <div class="card" id="mcard" style="margin-top:8px">
+            <div class="card-top"><span class="label" id="mlabel">LISTENING</span><span class="chip" id="mchip"></span></div>
+            <div class="card-body">
+              <div class="cover" id="mcover"></div>
+              <div class="fields">
+                <div class="mt" id="mtitle"></div>
+                <div class="ms" id="martist"></div>
+                <div class="elapsed" id="mtime"></div>
+              </div>
+            </div>
+          </div>
+          <div id="mset" style="margin-top:14px"></div>
+        </div>
+      </section>
+
       <section class="page" id="page-apps">
         <div class="sec"><h2>My apps</h2></div>
         <div class="apps" id="apps"></div>
@@ -548,6 +580,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
           <details class="acc"><summary><svg viewBox="0 0 16 16"><path d="M6.5 9.5l3-3M5 11a2.5 2.5 0 010-3.5L6.5 6M11 5a2.5 2.5 0 010 3.5L9.5 10"/></svg>Buttons<svg class="chev" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>The link button above the preview adds up to two buttons to your presence. Picking a Steam, GOG or VNDB result fills one in. Other people see them, you don't.</p></div></details>
           <details class="acc"><summary><svg viewBox="0 0 16 16"><path d="M4 2.5h8v11L8 10.5l-4 3z"/></svg>Saved apps<svg class="chev" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>The bookmark button saves the current title, icon and program. Saved apps start the presence by themselves when the program opens, and stop when it closes. Stopping by hand keeps it off until the program is closed and opened again.</p></div></details>
           <details class="acc"><summary><svg viewBox="0 0 16 16"><rect x="2" y="2" width="5" height="5" rx="1.2"/><rect x="9" y="2" width="5" height="5" rx="1.2"/><rect x="2" y="9" width="5" height="5" rx="1.2"/><rect x="9" y="9" width="5" height="5" rx="1.2"/></svg>My Games<svg class="chev" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>Games you started, saved or added with “Add to My Games” (with a program chosen) show up here, with the time you've played. Play launches the game and shows it on Discord. Click a game to change its banner. Click a game's title, here or in the search results, to see its store page info: description, trailers, screenshots, ratings and details. If Discord is closed, the presence starts when it opens. With several games open, closing the one on Discord brings back the previous one.</p></div></details>
+          <details class="acc"><summary><svg viewBox="0 0 16 16"><path d="M6 12V3.5l7-1.5v8.5"/><circle cx="4.5" cy="12" r="1.6"/><circle cx="11.5" cy="10.5" r="1.6"/></svg>Spotify app<svg class="chev" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>Turn on “Show what I play” in Settings to show the song playing in the Spotify desktop app. “Lyrics in the status” shows the synced lyrics.</p><p>Optional, for the exact cover right away (needs Spotify Premium on the account that creates it):</p><ol><li>Open the <a data-url="https://developer.spotify.com/dashboard">Spotify Developer Dashboard</a> and create an app. Any name works. For the redirect URI use http://127.0.0.1:3000/callback (it is never used).</li><li>Open the app's Settings and copy the Client ID and the Client Secret.</li><li>Paste both in Settings, under Spotify app.</li></ol><p>Without them the cover is found through ImgBB, or by search.</p></div></details>
           <details class="acc"><summary><svg viewBox="0 0 16 16"><path d="M2.5 8h11M8 2.5v11"/></svg>Background<svg class="chev" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>Set “When the window closes” to Tray to keep ANY-PRESENCE running. Open it again from the tray icon.</p></div></details>
           <details class="acc"><summary><svg viewBox="0 0 16 16"><path d="M8 2l6.5 11.5h-13zM8 6.5v3"/></svg>Problems<svg class="chev" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>No presence in Discord: Discord must be open and Activity Status on in Discord's settings.</p><p>Slow searches or uploads: try Connection → IPv4 in Settings.</p></div></details>
           <details class="acc"><summary><svg viewBox="0 0 16 16"><path d="M8 2l5 2v4c0 3-2.2 5-5 6-2.8-1-5-3-5-6V4z"/></svg>Terms &amp; Privacy<svg class="chev" viewBox="0 0 16 16"><path d="M6 3l5 5-5 5"/></svg></summary><div class="body"><p>What the app contacts, what stays on your PC, and the terms of use. <a data-url="https://ih3l.github.io/ANY-PRESENCE-releases/terms.html">Read the Terms &amp; Privacy</a></p></div></details>
@@ -578,6 +611,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
           <div class="group"><h2>Theme</h2><div class="themes" id="themes"></div></div>
           <div class="group"><h2>Browser extension</h2>
             <div class="switch" data-set="ext_on" data-icon="radar" data-label="Allow the extension"></div></div>
+          <div class="group"><h2>Spotify app</h2>
+            <div class="switch" data-set="desktop_spotify" data-icon="note" data-label="Show what I play"></div>
+            <div class="switch" data-set="spotify_lyrics" data-icon="note" data-label="Lyrics in the status"></div>
+            <label class="field plain"><input id="spid" placeholder="Spotify Client ID (optional, for faster covers)" spellcheck="false" autocomplete="off"></label>
+            <label class="field plain"><input id="spsecret" type="password" placeholder="Spotify Client Secret" spellcheck="false" autocomplete="off"></label></div>
           <div class="group"><h2>Search</h2>
             <div class="switch nsfw" data-set="nsfw" data-icon="nsfw" data-label="Allow NSFW results"></div>
             <div id="sources"></div></div>
@@ -706,6 +744,7 @@ const ICONS={
   nsfw:'<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.2"/><text x="8" y="10.3" text-anchor="middle" font-size="6" font-weight="700" fill="currentColor" stroke="none" font-family="sans-serif">18+</text></svg>',
   clock:'<svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.3 1.5"/></svg>',
   update:'<svg viewBox="0 0 16 16"><path d="M13 8a5 5 0 11-1.6-3.7M13 2.5v3h-3"/></svg>',
+  note:'<svg viewBox="0 0 16 16"><path d="M6 12V3.5l7-1.5v8.5"/><circle cx="4.5" cy="12" r="1.6"/><circle cx="11.5" cy="10.5" r="1.6"/></svg>',
   radar:'<svg viewBox="0 0 16 16"><path d="M9 1.5L3.5 9H8l-1 5.5L12.5 7H8z"/></svg>',
   win:'<svg viewBox="0 0 16 16"><rect x="2" y="2.5" width="12" height="9" rx="1.5"/><path d="M6 14h4M8 11.5V14"/></svg>',
   power:'<svg viewBox="0 0 16 16"><path d="M8 2v6"/><path d="M4.6 4.2a5.5 5.5 0 106.8 0"/></svg>'
@@ -1645,6 +1684,7 @@ renderThemes();
 
 /* ---------- settings + tabs ---------- */
 function showTab(name){
+  if(name==="music"){ M.picked=null; M.sig=""; musicPoll() }
   if(name==="apps") renderApps();
   if(name==="recent"){ renderRecent(); pollRunning(); refreshRecent() }
   $$(".rail-btn[data-tab]").forEach(t=>t.classList.toggle("on",t.dataset.tab===name));
@@ -1686,6 +1726,8 @@ function renderSettings(){
   $("#traybtn").disabled=!S.cfg.tray_available;
   $$("#netseg button").forEach(b=>b.classList.toggle("on",b.dataset.v===S.cfg.network));
   if(document.activeElement!==$("#imgbbkey")) $("#imgbbkey").value=S.cfg.imgbb_key||"";
+  if(document.activeElement!==$("#spid")) $("#spid").value=S.cfg.spotify_id||"";
+  if(document.activeElement!==$("#spsecret")) $("#spsecret").value=S.cfg.spotify_secret||"";
 }
 $$(".switch[data-set]").forEach(s=>s.onclick=async()=>{
   const k=s.dataset.set; S.cfg[k]=!S.cfg[k]; renderSettings(); renderElapsed();
@@ -1695,7 +1737,86 @@ $$(".switch[data-set]").forEach(s=>s.onclick=async()=>{
 $$("#netseg button").forEach(b=>b.onclick=()=>{S.cfg.network=b.dataset.v; api().set_setting("network",b.dataset.v); renderSettings()});
 $$("#closeseg button").forEach(b=>b.onclick=()=>{S.cfg.close_action=b.dataset.v; api().set_setting("close_action",b.dataset.v); renderSettings()});
 let keyTimer; $("#imgbbkey").oninput=e=>{clearTimeout(keyTimer); keyTimer=setTimeout(()=>{S.cfg.imgbb_key=e.target.value.trim(); api().set_setting("imgbb_key",S.cfg.imgbb_key); renderSettings()},300)};
+let spTimer; [["spid","spotify_id"],["spsecret","spotify_secret"]].forEach(([id,k])=>$("#"+id).oninput=e=>{clearTimeout(spTimer); spTimer=setTimeout(()=>{S.cfg[k]=e.target.value.trim(); api().set_setting(k,S.cfg[k])},300)});
 let idTimer; $("#appid").oninput=e=>{clearTimeout(idTimer); idTimer=setTimeout(()=>{S.cfg.app_id=e.target.value.trim(); api().set_setting("app_id",S.cfg.app_id)},300)};
+
+
+/* ---------- music ---------- */
+const M={picked:null,data:null,sig:"",lsig:"",busy:false};
+const mm=s=>{s=Math.max(0,Math.floor(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0")};
+const musicSite=()=>M.picked||(M.data&&M.data.now&&M.data.now.site)||"spotify";
+async function musicPoll(req){
+  if(!$("#page-music").classList.contains("on")||!apiReady()||M.busy) return;
+  M.busy=true;
+  try{ M.data=await api().music_now(req||{}); renderMusic() }catch(e){}
+  M.busy=false;
+}
+setInterval(()=>musicPoll(),1000);
+const MSEG={
+  status:(v)=>v?[["title","Title"],["artist","Episode"],["name","Name"]]:[["title","Title"],["artist","Artist"],["lyrics","Lyrics"],["name","Name"]],
+  nolyrics:()=>[["notes","Notes"],["title","Title"],["name","Name"]],
+  icon:(v)=>v?[["song","None"],["custom","Custom"]]:[["song","Song"],["playlist","Playlist"],["custom","Custom"]],
+  kind:()=>[["listening","Listening"],["watching","Watching"]]
+};
+function renderMusic(){
+  const d=M.data; if(!d) return;
+  const site=musicSite(), s=d.sites[site]; if(!s) return;
+  const video=s.music===false;
+  $("#msites").innerHTML=Object.keys(d.sites).map(k=>`<button data-s="${k}" class="${k===site?"on":""}">${esc(d.sites[k].name)}</button>`).join("");
+  // the song playing, as Discord will show it
+  const n=d.now;
+  $("#mlabel").textContent=n?(d.sites[n.site].kind==="watching"?"WATCHING ":"LISTENING TO ")+d.sites[n.site].name.toUpperCase():"NOTHING PLAYING";
+  $("#mchip").textContent=n?(n.playing?"Playing":"Paused"):"";$("#mchip").hidden=!n;
+  const cs=n?(n.image||""):"";
+  if($("#mcover").dataset.src!==cs){$("#mcover").dataset.src=cs;$("#mcover").innerHTML=cs?`<img src="${esc(cs)}" referrerpolicy="no-referrer" alt="">`:`<span class="letter">${n?esc((n.title[0]||"?").toUpperCase()):"?"}</span>`}
+  $("#mtitle").textContent=n?n.title:"Title";$("#martist").textContent=n?n.artist:"";
+  $("#mtime").textContent=!n?"":!n.playing?"Paused":n.start&&n.duration?`${mm(Math.min(n.duration,Date.now()/1000-n.start))} / ${mm(n.duration)}`:"";
+  // the settings of that site
+  const sig=JSON.stringify([site,s]);
+  if(sig!==M.sig && !($("#mset").contains(document.activeElement)&&document.activeElement.tagName==="INPUT")){
+    M.sig=sig;
+    const seg=(k)=>`<div class="seg" data-k="${k}">${MSEG[k](video).map(([v,l])=>`<button data-v="${v}" class="${s[k]===v?"on":""}">${l}</button>`).join("")}</div>`;
+    const sw=(k,l)=>`<div class="switch" data-b="${k}"><span class="lbl">${l}</span><span class="tg ${s[k]?"on":""}"></span></div>`;
+    $("#mset").innerHTML=sw("on","Show on Discord")
+      +`<div class="row-set"><span>Status shows</span>${seg("status")}</div>`
+      +(s.status==="lyrics"&&!video?`<div class="row-set"><span>When no lyrics</span>${seg("nolyrics")}</div>`:"")
+      +`<div class="row-set"><span>Cover</span>${seg("icon")}</div>`
+      +(s.icon==="custom"?`<input class="url" id="murl" placeholder="Image URL (https)" spellcheck="false" autocomplete="off" value="${esc(s.icon_url||"")}">`:"")
+      +sw("button","Button")+(video?"":sw("clean","Clean titles"))
+      +`<div class="row-set"><span>Shows as</span>${seg("kind")}</div>`;
+  }
+  // the lyrics found for the song
+  const L=d.lyrics, lbox=$("#mlyrics");
+  const lsig=JSON.stringify([n&&n.site,n&&n.title,L]);
+  if(lsig===M.lsig) return;
+  M.lsig=lsig;
+  if(!n){lbox.innerHTML=EMPTY;return}
+  if(d.sites[n.site].music===false){lbox.innerHTML='<div class="mhint">No lyrics for this site.</div>';return}
+  if(!L||!L.song&&!L.loading){lbox.innerHTML='<div class="mhint">Set Status shows to Lyrics to find lyrics for this song.</div>';return}
+  if(L.loading){lbox.innerHTML='<div class="mhint">Looking for lyrics…</div>';return}
+  const row=(id,t,sm,pv,mt)=>`<div class="res pick ${L.using===id?"sel":""}" data-id="${id}"><div class="t"><b>${esc(t)}</b><small>${esc(sm)}</small>${pv?`<small class="pv">${esc(pv)}</small>`:""}</div>${mt?'<span class="badge">Match</span>':""}</div>`;
+  lbox.innerHTML=row(-1,"No lyrics","","",false)+L.options.map(o=>row(o.id,o.title,`${o.artist}${o.duration?" · "+mm(o.duration):""}`,o.preview,o.matched&&!L.chosen)).join("");
+  if(!L.options.length) lbox.innerHTML+='<div class="mhint">No synced lyrics found. Try searching.</div>';
+}
+$("#msites").onclick=e=>{const b=e.target.closest("button[data-s]"); if(!b) return; M.picked=b.dataset.s; M.sig=""; renderMusic()};
+$("#mset").onclick=async e=>{
+  const site=musicSite(), s=M.data&&M.data.sites[site]; if(!s) return;
+  const b=e.target.closest("button[data-v]"), sw=e.target.closest(".switch[data-b]");
+  let patch=null;
+  if(b) patch={[b.parentElement.dataset.k]:b.dataset.v};
+  else if(sw) patch={[sw.dataset.b]:!s[sw.dataset.b]};
+  if(!patch) return;
+  Object.assign(s,patch); M.sig=""; M.lsig=""; renderMusic();
+  await api().music_set(site,patch); musicPoll();
+};
+let murlTimer; $("#mset").addEventListener("input",e=>{
+  if(e.target.id!=="murl") return;
+  clearTimeout(murlTimer); murlTimer=setTimeout(async()=>{
+    const v=e.target.value.trim(); if(v&&!v.startsWith("https://")) return;
+    const site=musicSite(); M.data.sites[site].icon_url=v; await api().music_set(site,{icon_url:v})},400)});
+$("#mlyrics").onclick=e=>{const r=e.target.closest(".res[data-id]"); if(!r) return; M.lsig=""; musicPoll({pick:Number(r.dataset.id)})};
+const musicSearch=()=>{const q=$("#mq").value.trim(); if(q){M.lsig=""; musicPoll({search:q})}};
+$("#mgo").onclick=musicSearch; $("#mq").addEventListener("keydown",e=>{if(e.key==="Enter") musicSearch()});
 
 /* ---------- wiring ---------- */
 $("#qclear").onclick=()=>{$("#q").value=""; $("#q").dispatchEvent(new Event("input")); $("#q").focus()};

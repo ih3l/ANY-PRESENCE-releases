@@ -7,6 +7,7 @@ if errorlevel 1 goto :fail
 python -m PyInstaller --noconfirm --onefile --noconsole ^
   --name ANY-PRESENCE ^
   --hidden-import pystray._win32 ^
+  --collect-submodules winrt ^
   --icon icon.ico ^
   --add-data "index.html;." ^
   --add-data "tray.png;." ^
