@@ -4,10 +4,11 @@ Show any game or program as your Discord Rich Presence, especially those that ha
 
 Pick a game, and ANY-PRESENCE sets its title, cover and status on your profile. You can change everything by hand.
 
-<img width="844" height="541" alt="image" src="https://github.com/user-attachments/assets/e4fb3278-f256-401d-bc06-d7b664668d05" />
+<img width="844" height="541" alt="image" src="https://github.com/user-attachments/assets/56408192-17a0-43cd-8767-1b29d8b93bee" />
 
 ## Features
 
+- **Music:** show what you're playing on SoundCloud and Spotify, with synced lyrics from [LRCLIB](https://lrclib.net). Works with the Spotify desktop app, or with the ANY-PRESENCE Web browser extension. Pick the lyrics, status, cover and button in the Music tab.
 - **Search** Steam, GOG, VNDB, DLsite, Wikipedia, Lutris and the Internet Archive to find the right title and cover
 - **Your own icons:** drop, paste or choose any image, and crop it
 - **Program icons** are added automatically (needs a free ImgBB key)
